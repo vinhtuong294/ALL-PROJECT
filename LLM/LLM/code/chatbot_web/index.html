@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trợ Lý Ẩm Thực AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+
+:root{
+  --bg:#0c0c0e;
+  --s1:#131316;
+  --s2:#1c1c21;
+  --s3:#252529;
+  --s4:#2e2e34;
+  --border:rgba(255,255,255,0.07);
+  --border-hover:rgba(255,255,255,0.14);
+  --text:#f0efe8;
+  --muted:#6b6b78;
+  --muted2:#4a4a54;
+  --accent:#f97316;
+  --accent2:#fb923c;
+  --accent-glow:rgba(249,115,22,0.15);
+  --green:#22c55e;
+  --green-soft:rgba(34,197,94,0.1);
+  --blue:#38bdf8;
+  --blue-soft:rgba(56,189,248,0.1);
+  --yellow:#fbbf24;
+  --red:#f87171;
+  --r:12px;
+  --r-sm:8px;
+  --r-lg:18px;
+}
+
+body{
+  font-family:'Sora',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  height:100vh;
+  display:flex;
+  overflow:hidden;
+  font-size:14px;
+}
+
+/* ═══ SIDEBAR ═══════════════════════════════════════════ */
+.sidebar{
+  width:264px;
+  background:var(--s1);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  flex-shrink:0;
+}
+
+.sidebar-top{
+  padding:18px 16px 14px;
+  border-bottom:1px solid var(--border);
+}
+
+.logo{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:14px;
+}
+
+.logo-mark{
+  width:34px;height:34px;
+  background:linear-gradient(135deg,var(--accent),#ef4444);
+  border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;
+  box-shadow:0 0 20px rgba(249,115,22,0.3);
+}
+
+.logo-text{
+  font-family:'DM Serif Display',serif;
+  font-size:17px;
+  letter-spacing:-0.3px;
+  line-height:1.2;
+}
+.logo-text span{display:block;font-size:10px;font-family:'Sora',sans-serif;color:var(--muted);font-weight:400;letter-spacing:0.5px}
+
+/* Tab switcher */
+.tab-switcher{
+  display:flex;
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:3px;
+  gap:2px;
+}
+
+.tab-btn{
+  flex:1;
+  padding:7px 6px;
+  border:none;
+  border-radius:6px;
+  background:none;
+  color:var(--muted);
+  font-family:'Sora',sans-serif;
+  font-size:11px;
+  font-weight:500;
+  cursor:pointer;
+  transition:all 0.2s;
+  display:flex;align-items:center;justify-content:center;gap:4px;
+}
+
+.tab-btn.active{
+  background:var(--accent);
+  color:#fff;
+  box-shadow:0 2px 8px rgba(249,115,22,0.35);
+}
+
+.tab-btn:not(.active):hover{color:var(--text);background:var(--s3)}
+
+/* Nav panel */
+.nav-panel{display:none;flex:1;flex-direction:column;overflow:hidden}
+.nav-panel.active{display:flex}
+
+.sidebar-scroll{flex:1;overflow-y:auto;padding:12px}
+.sidebar-scroll::-webkit-scrollbar{width:3px}
+.sidebar-scroll::-webkit-scrollbar-thumb{background:var(--s4);border-radius:3px}
+
+.nav-group{margin-bottom:18px}
+
+.nav-label{
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:0.8px;
+  text-transform:uppercase;
+  color:var(--muted2);
+  padding:0 8px;
+  margin-bottom:6px;
+  display:block;
+}
+
+.nav-btn{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  text-align:left;
+  padding:9px 10px;
+  background:none;
+  border:none;
+  color:var(--text);
+  font-family:'Sora',sans-serif;
+  font-size:12.5px;
+  border-radius:var(--r-sm);
+  cursor:pointer;
+  transition:background 0.15s;
+  line-height:1.35;
+}
+
+.nav-btn:hover{background:var(--s2)}
+
+.nav-btn .icon{
+  width:26px;height:26px;
+  background:var(--s3);
+  border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;
+  flex-shrink:0;
+}
+
+/* Menu builder panel */
+.menu-panel-sidebar{
+  flex:1;
+  overflow-y:auto;
+  padding:12px;
+}
+.menu-panel-sidebar::-webkit-scrollbar{width:3px}
+.menu-panel-sidebar::-webkit-scrollbar-thumb{background:var(--s4);border-radius:3px}
+
+.menu-builder{
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:14px;
+  margin-bottom:12px;
+}
+
+.menu-builder-title{
+  font-size:12px;
+  font-weight:600;
+  color:var(--text);
+  margin-bottom:12px;
+  display:flex;align-items:center;gap:6px;
+}
+
+.form-label{
+  font-size:11px;color:var(--muted);
+  margin-bottom:5px;display:block;font-weight:500;
+}
+
+.form-select,.form-input{
+  width:100%;
+  padding:8px 10px;
+  background:var(--s3);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  color:var(--text);
+  font-family:'Sora',sans-serif;
+  font-size:12px;
+  outline:none;
+  transition:border-color 0.2s;
+  appearance:none;
+  margin-bottom:10px;
+}
+
+.form-select:focus,.form-input:focus{border-color:var(--accent)}
+
+.note-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+
+.note-chip{
+  padding:4px 10px;
+  background:var(--s3);
+  border:1px solid var(--border);
+  border-radius:20px;
+  font-size:11px;
+  color:var(--muted);
+  cursor:pointer;
+  transition:all 0.15s;
+  font-family:'Sora',sans-serif;
+}
+
+.note-chip.selected{
+  background:var(--accent-glow);
+  border-color:var(--accent);
+  color:var(--accent);
+}
+
+.days-row{display:flex;gap:5px;margin-bottom:10px}
+
+.day-btn{
+  flex:1;padding:6px 4px;
+  background:var(--s3);border:1px solid var(--border);
+  border-radius:6px;color:var(--muted);
+  font-family:'Sora',sans-serif;font-size:11px;
+  cursor:pointer;transition:all 0.15s;text-align:center;
+}
+
+.day-btn.selected{
+  background:var(--accent-glow);
+  border-color:var(--accent);color:var(--accent);font-weight:600;
+}
+
+.gen-btn{
+  width:100%;padding:10px;
+  background:linear-gradient(135deg,var(--accent),#ef4444);
+  border:none;border-radius:var(--r-sm);
+  color:#fff;font-family:'Sora',sans-serif;
+  font-size:12px;font-weight:600;
+  cursor:pointer;transition:all 0.2s;
+  box-shadow:0 2px 12px rgba(249,115,22,0.3);
+}
+
+.gen-btn:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(249,115,22,0.4)}
+.gen-btn:active{transform:translateY(0)}
+.gen-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+
+/* Sidebar footer */
+.sidebar-footer{
+  padding:12px 16px;
+  border-top:1px solid var(--border);
+}
+
+.api-status{
+  display:flex;align-items:center;gap:7px;
+  font-size:11px;color:var(--muted);
+}
+
+.dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--muted2);transition:all 0.3s;
+}
+.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+.dot.off{background:var(--red);box-shadow:0 0 8px var(--red)}
+
+/* ═══ MAIN ═══════════════════════════════════════════════ */
+.main{
+  flex:1;display:flex;flex-direction:column;min-width:0;
+  position:relative;
+}
+
+/* Content views */
+.view{display:none;flex:1;flex-direction:column;min-height:0}
+.view.active{display:flex}
+
+/* ── Chat view ── */
+.chat-scroll{
+  flex:1;overflow-y:auto;
+  padding:28px 0 8px;
+  scroll-behavior:smooth;
+}
+.chat-scroll::-webkit-scrollbar{width:4px}
+.chat-scroll::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px}
+
+.msgs{
+  max-width:840px;margin:0 auto;
+  padding:0 28px;
+}
+
+/* Welcome */
+.welcome{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  min-height:58vh;text-align:center;
+  animation:fadeUp 0.5s ease;
+}
+
+.welcome-emoji{font-size:52px;margin-bottom:18px;line-height:1}
+
+.welcome h1{
+  font-family:'DM Serif Display',serif;
+  font-size:30px;margin-bottom:8px;
+  background:linear-gradient(135deg,var(--text),var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+
+.welcome p{color:var(--muted);font-size:13px;max-width:380px;line-height:1.65}
+
+.chips{
+  display:flex;flex-wrap:wrap;gap:7px;
+  margin-top:22px;justify-content:center;
+}
+
+.chip{
+  padding:8px 15px;
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  font-size:12px;color:var(--text);
+  cursor:pointer;transition:all 0.2s;
+  font-family:'Sora',sans-serif;
+}
+
+.chip:hover{border-color:var(--accent);background:var(--accent-glow);color:var(--accent)}
+
+/* Messages */
+.msg{
+  display:flex;gap:11px;
+  margin-bottom:22px;
+  animation:fadeUp 0.3s ease;
+}
+
+.msg.user{flex-direction:row-reverse}
+
+.av{
+  width:30px;height:30px;
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;flex-shrink:0;margin-top:2px;
+}
+
+.msg.bot .av{background:var(--accent-glow);border:1px solid rgba(249,115,22,0.2)}
+.msg.user .av{background:var(--blue-soft);border:1px solid rgba(56,189,248,0.2)}
+
+.bubble{max-width:700px;font-size:13.5px;line-height:1.65}
+.msg.user .bubble{
+  background:var(--s2);
+  padding:11px 15px;
+  border-radius:var(--r) var(--r) 4px var(--r);
+  border:1px solid var(--border);
+}
+.msg.bot .bubble{flex:1;min-width:0}
+
+.reply-box{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:14px 18px;
+  white-space:pre-wrap;
+  word-break:break-word;
+  line-height:1.7;
+}
+
+.intent-tag{
+  display:inline-flex;align-items:center;gap:5px;
+  margin-bottom:8px;
+  padding:3px 10px;
+  font-size:10.5px;font-weight:600;
+  border-radius:12px;
+  background:var(--accent-glow);
+  color:var(--accent);
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  border:1px solid rgba(249,115,22,0.2);
+}
+
+.intent-tag.shop-tag{
+  background:var(--blue-soft);
+  color:var(--blue);
+  border-color:rgba(56,189,248,0.2);
+}
+
+/* Dish cards */
+.dishes-section{margin-top:14px}
+.section-header{
+  font-size:12px;font-weight:600;
+  color:var(--muted);margin-bottom:10px;
+  display:flex;align-items:center;gap:6px;
+}
+
+.dishes-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+  gap:10px;
+}
+
+.dcard{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  overflow:hidden;
+  cursor:pointer;
+  transition:all 0.22s;
+}
+
+.dcard:hover{
+  border-color:rgba(249,115,22,0.4);
+  transform:translateY(-2px);
+  box-shadow:0 10px 28px rgba(0,0,0,0.4);
+}
+
+.dcard-img{
+  width:100%;height:132px;
+  overflow:hidden;background:var(--s2);
+  position:relative;
+}
+
+.dcard-img img{
+  width:100%;height:100%;object-fit:cover;
+  transition:transform 0.3s;
+}
+
+.dcard:hover .dcard-img img{transform:scale(1.04)}
+
+.dcard-placeholder{
+  width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:36px;
+  background:linear-gradient(135deg,var(--s2),var(--s3));
+}
+
+.cal-pill{
+  position:absolute;top:7px;right:7px;
+  background:rgba(0,0,0,0.75);
+  backdrop-filter:blur(6px);
+  padding:2px 8px;border-radius:8px;
+  font-size:11px;font-weight:600;
+  color:var(--yellow);
+}
+
+.dcard-body{padding:11px 13px}
+
+.dcard-name{
+  font-size:13px;font-weight:600;
+  margin-bottom:7px;line-height:1.3;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden;
+}
+
+.dcard-tags{
+  display:flex;flex-wrap:wrap;gap:5px;
+  margin-bottom:8px;
+}
+
+.dtag{
+  display:flex;align-items:center;gap:3px;
+  font-size:10.5px;color:var(--muted);
+  background:var(--s2);
+  padding:2px 7px;border-radius:5px;
+}
+
+.dcard-ing{
+  font-size:11.5px;color:var(--muted);
+  line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden;
+  margin-bottom:9px;
+}
+
+.buy-btn{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  width:100%;padding:8px 0;
+  background:var(--green-soft);
+  border:1px solid rgba(34,197,94,0.2);
+  border-radius:var(--r-sm);
+  color:var(--green);font-size:12px;font-weight:600;
+  font-family:'Sora',sans-serif;
+  cursor:pointer;transition:all 0.18s;
+}
+
+.buy-btn:hover{
+  background:rgba(34,197,94,0.18);
+  border-color:var(--green);
+}
+
+/* Shop cards */
+.shops-grid{display:flex;flex-direction:column;gap:10px}
+
+.scard{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:14px;
+  transition:border-color 0.2s;
+}
+
+.scard:hover{border-color:var(--border-hover)}
+
+.scard-top{
+  display:flex;align-items:center;gap:11px;
+  margin-bottom:10px;
+}
+
+.scard-img{
+  width:46px;height:46px;border-radius:10px;
+  object-fit:cover;background:var(--s2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;flex-shrink:0;overflow:hidden;
+}
+
+.scard-img img{width:100%;height:100%;object-fit:cover}
+
+.scard-info{flex:1;min-width:0}
+
+.scard-name{
+  font-size:14px;font-weight:600;
+  margin-bottom:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+.scard-meta{
+  display:flex;align-items:center;gap:8px;
+  font-size:11.5px;color:var(--muted);
+}
+
+.rating{color:var(--yellow);font-weight:600}
+
+.scard-goods{
+  display:flex;flex-wrap:wrap;gap:5px;
+}
+
+.good-pill{
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:4px 10px;
+  font-size:11.5px;
+}
+
+.good-price{color:var(--accent);font-weight:600;margin-left:5px}
+.good-disc{color:var(--green);margin-left:3px;font-size:11px}
+
+/* Typing */
+.typing{
+  display:flex;gap:4px;
+  padding:13px 16px;
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  width:fit-content;
+}
+
+.tdot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--muted);
+  animation:bounce 1.2s infinite;
+}
+.tdot:nth-child(2){animation-delay:0.15s}
+.tdot:nth-child(3){animation-delay:0.3s}
+
+/* Input bar */
+.input-bar{
+  padding:14px 24px 18px;
+  border-top:1px solid var(--border);
+  background:var(--s1);
+}
+
+.input-wrap{
+  max-width:840px;margin:0 auto;
+  display:flex;gap:9px;align-items:flex-end;
+}
+
+.input-inner{flex:1;position:relative}
+
+#msgInput{
+  width:100%;
+  padding:13px 16px;
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  color:var(--text);
+  font-family:'Sora',sans-serif;
+  font-size:13.5px;
+  resize:none;outline:none;
+  transition:border-color 0.2s;
+  min-height:46px;max-height:120px;
+}
+
+#msgInput:focus{border-color:var(--accent)}
+#msgInput::placeholder{color:var(--muted2)}
+
+.send{
+  width:46px;height:46px;
+  background:var(--accent);
+  border:none;border-radius:var(--r);
+  color:#fff;font-size:17px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.2s;flex-shrink:0;
+}
+
+.send:hover{background:#ea6510;transform:scale(1.04)}
+.send:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+
+/* ── Menu view ── */
+.menu-view-inner{
+  flex:1;overflow-y:auto;
+  padding:24px;
+}
+.menu-view-inner::-webkit-scrollbar{width:4px}
+.menu-view-inner::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px}
+
+.menu-container{max-width:900px;margin:0 auto}
+
+.menu-view-title{
+  font-family:'DM Serif Display',serif;
+  font-size:24px;margin-bottom:4px;
+}
+.menu-view-sub{font-size:12.5px;color:var(--muted);margin-bottom:22px}
+
+.menu-empty{
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  min-height:50vh;text-align:center;
+  color:var(--muted);
+  animation:fadeUp 0.5s ease;
+}
+
+.menu-empty-icon{font-size:52px;margin-bottom:16px;opacity:0.5}
+.menu-empty h2{font-size:18px;margin-bottom:6px;color:var(--text)}
+.menu-empty p{font-size:13px;line-height:1.6;max-width:320px}
+
+.menu-days{display:flex;flex-direction:column;gap:20px}
+
+.day-block{
+  background:var(--s1);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  overflow:hidden;
+}
+
+.day-header{
+  padding:14px 18px;
+  background:var(--s2);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+
+.day-title{
+  font-weight:600;font-size:14px;
+  display:flex;align-items:center;gap:8px;
+}
+
+.day-meals{display:flex;flex-direction:column;gap:0}
+
+.meal-row{
+  display:flex;align-items:center;gap:14px;
+  padding:13px 18px;
+  border-bottom:1px solid var(--border);
+  transition:background 0.15s;
+}
+
+.meal-row:last-child{border:none}
+.meal-row:hover{background:var(--s2)}
+
+.meal-label{
+  width:80px;flex-shrink:0;
+  font-size:12px;font-weight:600;
+  color:var(--muted);
+}
+
+.meal-img{
+  width:54px;height:54px;
+  border-radius:10px;overflow:hidden;
+  background:var(--s2);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:24px;
+}
+.meal-img img{width:100%;height:100%;object-fit:cover}
+
+.meal-info{flex:1;min-width:0}
+
+.meal-name{
+  font-size:13px;font-weight:600;
+  margin-bottom:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+.meal-meta{
+  display:flex;flex-wrap:wrap;gap:5px;
+}
+
+.meal-tag{
+  font-size:10.5px;color:var(--muted);
+  background:var(--s2);
+  padding:2px 7px;border-radius:5px;
+}
+
+.meal-actions{display:flex;gap:6px;flex-shrink:0}
+
+.meal-action-btn{
+  padding:6px 11px;
+  border-radius:6px;
+  font-family:'Sora',sans-serif;
+  font-size:11.5px;font-weight:600;
+  cursor:pointer;transition:all 0.15s;
+  border:1px solid transparent;
+}
+
+.btn-recipe{
+  background:var(--s3);
+  border-color:var(--border);
+  color:var(--text);
+}
+.btn-recipe:hover{border-color:var(--border-hover)}
+
+.btn-buy{
+  background:var(--green-soft);
+  border-color:rgba(34,197,94,0.2);
+  color:var(--green);
+}
+.btn-buy:hover{background:rgba(34,197,94,0.18);border-color:var(--green)}
+
+/* ═══ MODAL ═════════════════════════════════════════════ */
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,0.7);
+  backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;
+  z-index:100;
+  padding:20px;
+  animation:fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+.modal{
+  background:var(--s1);
+  border:1px solid var(--border-hover);
+  border-radius:var(--r-lg);
+  width:100%;max-width:600px;
+  max-height:88vh;overflow-y:auto;
+  animation:slideUp 0.25s ease;
+}
+
+@keyframes slideUp{
+  from{opacity:0;transform:translateY(18px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+.modal::-webkit-scrollbar{width:3px}
+.modal::-webkit-scrollbar-thumb{background:var(--s4);border-radius:3px}
+
+.modal-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 22px;
+  border-bottom:1px solid var(--border);
+  position:sticky;top:0;
+  background:var(--s1);z-index:2;
+}
+
+.modal-head h2{font-size:17px;font-weight:700;line-height:1.3}
+
+.modal-x{
+  width:30px;height:30px;
+  background:var(--s2);border:none;
+  border-radius:7px;color:var(--text);
+  font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background 0.15s;
+}
+
+.modal-x:hover{background:var(--s3)}
+
+.modal-body{padding:18px 22px 26px}
+
+.meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+
+.meta-chip{
+  display:flex;align-items:center;gap:4px;
+  padding:5px 11px;
+  background:var(--s2);border-radius:var(--r-sm);
+  font-size:12.5px;font-weight:500;
+}
+
+.rsec{margin-bottom:18px}
+
+.rsec h3{
+  font-size:13px;font-weight:600;
+  margin-bottom:9px;color:var(--accent);
+  display:flex;align-items:center;gap:5px;
+}
+
+.rsec ul{list-style:none}
+
+.rsec li{
+  padding:7px 8px;
+  font-size:12.5px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:7px;
+  border-radius:6px;cursor:pointer;
+  transition:background 0.15s;
+}
+
+.rsec li:last-child{border:none}
+.rsec li:hover{background:var(--s2)}
+.rsec li::before{content:'•';color:var(--accent);font-weight:bold;flex-shrink:0}
+
+.rtext{
+  font-size:12.5px;line-height:1.75;
+  color:var(--text);white-space:pre-wrap;
+  background:var(--s2);padding:12px 14px;
+  border-radius:var(--r-sm);
+}
+
+.modal-buy-btn{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  width:100%;padding:12px;
+  background:linear-gradient(135deg,var(--accent),#ef4444);
+  border:none;border-radius:var(--r);
+  color:#fff;font-family:'Sora',sans-serif;
+  font-size:14px;font-weight:600;
+  cursor:pointer;transition:all 0.2s;
+  margin-top:6px;
+  box-shadow:0 4px 16px rgba(249,115,22,0.3);
+}
+
+.modal-buy-btn:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(249,115,22,0.4)}
+.modal-buy-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+
+/* Stall panel inside modal */
+.stall-panel{
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:11px 13px;
+  margin:4px 0 8px;
+}
+
+/* Toast */
+.toast{
+  position:fixed;bottom:22px;left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--green);color:#0c0c0e;
+  padding:10px 22px;border-radius:var(--r);
+  font-size:13px;font-weight:600;
+  z-index:200;opacity:0;
+  transition:all 0.3s ease;pointer-events:none;
+}
+
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Animations */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(14px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+@keyframes bounce{
+  0%,60%,100%{transform:translateY(0)}
+  30%{transform:translateY(-6px)}
+}
+
+/* Spinner */
+.spin{
+  display:inline-block;
+  width:14px;height:14px;
+  border:2px solid rgba(255,255,255,0.3);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin 0.7s linear infinite;
+}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Loading skeleton */
+.skeleton{
+  background:linear-gradient(90deg,var(--s2) 25%,var(--s3) 50%,var(--s2) 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s infinite;
+  border-radius:6px;
+}
+
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .sidebar{display:none}
+  .dishes-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-top">
+    <div class="logo">
+      <div class="logo-mark">🍜</div>
+      <div class="logo-text">
+        Ẩm Thực AI
+        <span>Food Assistant</span>
+      </div>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="tab-switcher">
+      <button class="tab-btn active" id="tabChat" onclick="switchTab('chat')">
+        💬 Chat
+      </button>
+      <button class="tab-btn" id="tabMenu" onclick="switchTab('menu')">
+        📅 Thực đơn
+      </button>
+      <button class="tab-btn" id="tabShop" onclick="switchTab('shop')">
+        🏪 Gian hàng
+      </button>
+    </div>
+  </div>
+
+  <!-- Nav panel: Chat -->
+  <div class="nav-panel active" id="navChat">
+    <div class="sidebar-scroll">
+      <button class="nav-btn" style="margin-bottom:8px;border:1px dashed var(--border);justify-content:center;color:var(--muted)"
+              onclick="newChat()">
+        + Cuộc trò chuyện mới
+      </button>
+
+      <div class="nav-group">
+        <span class="nav-label">🍽️ Món ăn</span>
+        <button class="nav-btn" onclick="suggest('Gợi ý món từ thịt bò')">
+          <span class="icon">🥩</span>Gợi ý món thịt bò
+        </button>
+        <button class="nav-btn" onclick="suggest('Món hải sản ngon nhất')">
+          <span class="icon">🦐</span>Hải sản tươi ngon
+        </button>
+        <button class="nav-btn" onclick="suggest('Có món chay nào dễ làm?')">
+          <span class="icon">🥬</span>Món chay ngon
+        </button>
+        <button class="nav-btn" onclick="suggest('Nấu nhanh dưới 20 phút')">
+          <span class="icon">⚡</span>Nấu nhanh 20 phút
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <span class="nav-label">💪 Sức khỏe</span>
+        <button class="nav-btn" onclick="suggest('Tôi muốn giảm cân ăn gì nhẹ?')">
+          <span class="icon">🥗</span>Giảm cân ăn nhẹ
+        </button>
+        <button class="nav-btn" onclick="suggest('Tôi muốn tăng cân gợi ý món nhiều calo')">
+          <span class="icon">💪</span>Tăng cân, nhiều calo
+        </button>
+        <button class="nav-btn" onclick="suggest('Món canh bổ dưỡng cho gia đình')">
+          <span class="icon">🍲</span>Canh bổ dưỡng gia đình
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <span class="nav-label">🏪 Gian hàng</span>
+        <button class="nav-btn" onclick="suggest('Gian hàng nào bán thịt bò tươi uy tín?')">
+          <span class="icon">🥩</span>Gian hàng thịt bò
+        </button>
+        <button class="nav-btn" onclick="suggest('Tìm gian hàng bán hải sản đánh giá cao')">
+          <span class="icon">🦑</span>Gian hàng hải sản
+        </button>
+        <button class="nav-btn" onclick="suggest('Cửa hàng nào bán rau củ giá rẻ?')">
+          <span class="icon">🥦</span>Gian hàng rau củ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav panel: Menu builder -->
+  <div class="nav-panel" id="navMenu">
+    <div class="menu-panel-sidebar">
+      <div class="menu-builder">
+        <div class="menu-builder-title">📅 Tạo thực đơn</div>
+
+        <label class="form-label">Mục tiêu sức khỏe</label>
+        <select class="form-select" id="menuGoal">
+          <option value="Cân bằng">⚖️ Dinh dưỡng cân bằng</option>
+          <option value="Giảm cân">🥗 Giảm cân</option>
+          <option value="Tăng cân">💪 Tăng cân</option>
+          <option value="Tăng cơ">🏋️ Tăng cơ</option>
+          <option value="Sức đề kháng">🛡️ Tăng sức đề kháng</option>
+        </select>
+
+        <label class="form-label">Số ngày</label>
+        <div class="days-row">
+          <button class="day-btn selected" data-days="1" onclick="selectDays(this)">1</button>
+          <button class="day-btn" data-days="2" onclick="selectDays(this)">2</button>
+          <button class="day-btn" data-days="3" onclick="selectDays(this)">3</button>
+          <button class="day-btn" data-days="5" onclick="selectDays(this)">5</button>
+          <button class="day-btn" data-days="7" onclick="selectDays(this)">7</button>
+        </div>
+
+        <label class="form-label">Số bữa / ngày</label>
+        <select class="form-select" id="menuMeals">
+          <option value="1">1 bữa</option>
+          <option value="2">2 bữa</option>
+          <option value="3" selected>3 bữa</option>
+        </select>
+
+        <label class="form-label">Lưu ý thêm (chọn nhiều)</label>
+        <div class="note-chips" id="noteChips">
+          <button class="note-chip" onclick="toggleNote(this)">🥬 Món chay</button>
+          <button class="note-chip" onclick="toggleNote(this)">🏠 Miền Bắc</button>
+          <button class="note-chip" onclick="toggleNote(this)">🌶️ Miền Trung</button>
+          <button class="note-chip" onclick="toggleNote(this)">🍚 Miền Nam</button>
+          <button class="note-chip" onclick="toggleNote(this)">👶 Trẻ em</button>
+          <button class="note-chip" onclick="toggleNote(this)">👴 Người lớn tuổi</button>
+          <button class="note-chip" onclick="toggleNote(this)">⚖️ Ăn kiêng</button>
+        </div>
+
+        <button class="gen-btn" id="genBtn" onclick="generateMenu()">
+          ✨ Tạo thực đơn
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav panel: Shop (gợi ý nhanh) -->
+  <div class="nav-panel" id="navShop">
+    <div class="sidebar-scroll">
+      <div class="nav-group">
+        <span class="nav-label">Tìm nhanh</span>
+        <button class="nav-btn" onclick="suggest('Gian hàng nào bán thịt heo tươi giá rẻ?')">
+          <span class="icon">🐷</span>Thịt heo tươi
+        </button>
+        <button class="nav-btn" onclick="suggest('Tìm gian hàng bán tôm tươi uy tín')">
+          <span class="icon">🦐</span>Tôm tươi
+        </button>
+        <button class="nav-btn" onclick="suggest('Cửa hàng nào bán cá hồi đánh giá cao?')">
+          <span class="icon">🐟</span>Cá hồi
+        </button>
+        <button class="nav-btn" onclick="suggest('Gian hàng bán rau sạch gần đây')">
+          <span class="icon">🥦</span>Rau sạch
+        </button>
+        <button class="nav-btn" onclick="suggest('Shop bán trứng gà sạch uy tín')">
+          <span class="icon">🥚</span>Trứng gà sạch
+        </button>
+        <button class="nav-btn" onclick="suggest('Gian hàng bán đậu phụ tươi giá tốt')">
+          <span class="icon">🫘</span>Đậu phụ tươi
+        </button>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">Theo rating</span>
+        <button class="nav-btn" onclick="suggest('Gian hàng nào đánh giá cao nhất trên 4 sao?')">
+          <span class="icon">⭐</span>Rating cao nhất
+        </button>
+        <button class="nav-btn" onclick="suggest('Gian hàng bán hải sản đánh giá tốt nhất')">
+          <span class="icon">🌟</span>Hải sản rating cao
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="api-status">
+      <span class="dot" id="dot"></span>
+      <span id="statusTxt">Đang kết nối...</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══════════════════════════════════════════════ -->
+<main class="main">
+
+  <!-- View: Chat -->
+  <div class="view active" id="viewChat">
+    <div class="chat-scroll" id="chatScroll">
+      <div class="msgs" id="msgs">
+        <div class="welcome" id="welcome">
+          <div class="welcome-emoji">🍳</div>
+          <h1>Trợ Lý Ẩm Thực AI</h1>
+          <p>Hỏi tôi về món ăn, công thức nấu, gian hàng nguyên liệu hay thực đơn sức khỏe!</p>
+          <div class="chips">
+            <button class="chip" onclick="suggest('Gợi ý món thịt bò')">🥩 Món thịt bò</button>
+            <button class="chip" onclick="suggest('Món hải sản tươi ngon')">🦐 Hải sản tươi</button>
+            <button class="chip" onclick="suggest('Ăn kiêng giảm cân nên ăn gì?')">🥗 Ăn kiêng</button>
+            <button class="chip" onclick="suggest('Nấu nhanh 15 phút')">⚡ Nấu nhanh</button>
+            <button class="chip" onclick="suggest('Gian hàng nào bán thịt bò tươi uy tín?')">🏪 Gian hàng</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-wrap">
+        <div class="input-inner">
+          <textarea id="msgInput"
+            placeholder="Hỏi về món ăn, gian hàng, công thức..."
+            rows="1"
+            onkeydown="handleKey(event)"
+            oninput="autoResize(this)"></textarea>
+        </div>
+        <button class="send" id="sendBtn" onclick="sendMessage()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View: Menu -->
+  <div class="view" id="viewMenu">
+    <div class="menu-view-inner">
+      <div class="menu-container">
+        <div class="menu-view-title">📅 Thực đơn của bạn</div>
+        <div class="menu-view-sub" id="menuSub">Chọn mục tiêu và nhấn "Tạo thực đơn" ở thanh bên</div>
+        <div id="menuResult">
+          <div class="menu-empty">
+            <div class="menu-empty-icon">📋</div>
+            <h2>Chưa có thực đơn</h2>
+            <p>Chọn mục tiêu sức khỏe, số ngày và nhấn "Tạo thực đơn" ở thanh bên trái để bắt đầu.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══ MODAL ═══════════════════════════════════════════════ -->
+<div class="overlay" id="modal" style="display:none" onclick="closeModalOutside(event)">
+  <div class="modal" id="modalBox">
+    <div class="modal-head">
+      <h2 id="modalTitle"></h2>
+      <button class="modal-x" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let sessionId = null;
+let convHistory = [];
+let loading = false;
+let selectedDays = 1;
+let selectedNotes = [];
+let currentTab = 'chat';
+
+// ─── Init ────────────────────────────────────────────────
+checkAPI();
+
+function checkAPI() {
+  fetch(`${API}/health`)
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('dot').className = 'dot on';
+      document.getElementById('statusTxt').textContent = `Online · ${d.total_dishes} món`;
+    })
+    .catch(() => {
+      document.getElementById('dot').className = 'dot off';
+      document.getElementById('statusTxt').textContent = 'API offline';
+    });
+}
+
+// ─── Tab / View switching ────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+
+  // Tab buttons
+  ['chat','menu','shop'].forEach(t => {
+    document.getElementById('tabChat').classList.toggle('active', t === 'chat' && tab === 'chat');
+    document.getElementById('tabMenu').classList.toggle('active', t === 'menu' && tab === 'menu');
+    document.getElementById('tabShop').classList.toggle('active', t === 'shop' && tab === 'shop');
+  });
+
+  // Sidebar nav panels
+  document.getElementById('navChat').classList.toggle('active', tab === 'chat');
+  document.getElementById('navMenu').classList.toggle('active', tab === 'menu');
+  document.getElementById('navShop').classList.toggle('active', tab === 'shop');
+
+  // Main views: menu has own view, chat & shop use chat view
+  document.getElementById('viewChat').classList.toggle('active', tab !== 'menu');
+  document.getElementById('viewMenu').classList.toggle('active', tab === 'menu');
+
+  // Shop tab → update placeholder
+  if (tab === 'shop') {
+    document.getElementById('msgInput').placeholder = 'Hỏi gian hàng nào bán gì, ở đâu, rating cao...';
+  } else {
+    document.getElementById('msgInput').placeholder = 'Hỏi về món ăn, gian hàng, công thức...';
+  }
+}
+
+// ─── Menu builder ────────────────────────────────────────
+function selectDays(btn) {
+  document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedDays = parseInt(btn.dataset.days);
+}
+
+function toggleNote(btn) {
+  btn.classList.toggle('selected');
+  const label = btn.textContent.replace(/^[^\s]+\s/, '').trim();
+  // Map emoji label → API note key
+  const noteMap = {
+    'Món chay': 'Món chay',
+    'Miền Bắc': 'Miền Bắc',
+    'Miền Trung': 'Miền Trung',
+    'Miền Nam': 'Miền Nam',
+    'Trẻ em': 'Trẻ em',
+    'Người lớn tuổi': 'Người lớn tuổi',
+    'Ăn kiêng': 'Ăn kiêng',
+  };
+  const key = Object.keys(noteMap).find(k => btn.textContent.includes(k));
+  if (btn.classList.contains('selected') && key) {
+    if (!selectedNotes.includes(noteMap[key])) selectedNotes.push(noteMap[key]);
+  } else {
+    selectedNotes = selectedNotes.filter(n => n !== noteMap[key]);
+  }
+}
+
+async function generateMenu() {
+  const goal = document.getElementById('menuGoal').value;
+  const meals = parseInt(document.getElementById('menuMeals').value);
+  const btn = document.getElementById('genBtn');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Đang tạo thực đơn...';
+
+  try {
+    const res = await fetch(`${API}/menu/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        days: selectedDays,
+        meals_per_day: meals,
+        health_goal: goal,
+        notes: selectedNotes,
+      }),
+    });
+    const data = await res.json();
+    renderMenu(data);
+  } catch (e) {
+    document.getElementById('menuResult').innerHTML =
+      `<p style="color:var(--red);font-size:13px">Lỗi: ${e.message}</p>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Tạo thực đơn';
+  }
+}
+
+function renderMenu(data) {
+  const goalLabels = {
+    'Cân bằng':'Dinh dưỡng cân bằng',
+    'Giảm cân':'Giảm cân',
+    'Tăng cân':'Tăng cân',
+    'Tăng cơ':'Tăng cơ',
+    'Sức đề kháng':'Tăng sức đề kháng',
+  };
+  document.getElementById('menuSub').textContent =
+    `${goalLabels[data.health_goal] || data.health_goal} · ${data.days} ngày · ${data.meals_per_day} bữa/ngày`;
+
+  const daysHTML = data.menu.map((day, di) => {
+    const mealsHTML = day.meals.map(m => {
+      const d = m.dish;
+      const imgTag = d.image_url
+        ? `<img src="${esc(d.image_url)}" alt="${esc(d.dish_name)}" loading="lazy" onerror="this.parentElement.innerHTML='🍽️'">`
+        : '🍽️';
+
+      return `
+        <div class="meal-row">
+          <div class="meal-label">${esc(m.meal)}</div>
+          <div class="meal-img">${imgTag}</div>
+          <div class="meal-info">
+            <div class="meal-name">${esc(d.dish_name)}</div>
+            <div class="meal-meta">
+              ${d.calories ? `<span class="meal-tag">🔥 ${Math.round(d.calories)} kcal</span>` : ''}
+              ${d.cooking_time ? `<span class="meal-tag">⏱ ${esc(d.cooking_time)}</span>` : ''}
+              ${d.level ? `<span class="meal-tag">📊 ${esc(d.level)}</span>` : ''}
+            </div>
+          </div>
+          <div class="meal-actions">
+            <button class="meal-action-btn btn-recipe"
+              onclick='openRecipeFromDish(${JSON.stringify(d).replace(/'/g,"&#39;")})'>
+              📖 Công thức
+            </button>
+            <button class="meal-action-btn btn-buy"
+              onclick="loadStalls('${esc(d.dish_id)}', this, true)">
+              🛒 Mua
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="day-block">
+        <div class="day-header">
+          <div class="day-title">
+            <span style="background:var(--accent-glow);color:var(--accent);padding:3px 10px;border-radius:6px;font-size:12px">
+              Ngày ${day.day}
+            </span>
+          </div>
+          <span style="font-size:11px;color:var(--muted)">${day.meals.length} bữa</span>
+        </div>
+        <div class="day-meals">${mealsHTML}</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('menuResult').innerHTML =
+    `<div class="menu-days">${daysHTML}</div>`;
+}
+
+// ─── Chat ────────────────────────────────────────────────
+function suggest(text) {
+  // Luôn switch về chat view để hiện messages
+  if (currentTab !== 'chat' && currentTab !== 'shop') {
+    switchTab('chat');
+  }
+  // Đảm bảo viewChat active dù đang ở tab nào
+  document.getElementById('viewChat').classList.add('active');
+  document.getElementById('viewMenu').classList.remove('active');
+  document.getElementById('msgInput').value = text;
+  sendMessage();
+}
+
+function newChat() {
+  sessionId = null;
+  convHistory = [];
+  const msgs = document.getElementById('msgs');
+  msgs.innerHTML = `
+    <div class="welcome" id="welcome">
+      <div class="welcome-emoji">🍳</div>
+      <h1>Trợ Lý Ẩm Thực AI</h1>
+      <p>Hỏi tôi về món ăn, công thức nấu, gian hàng nguyên liệu hay thực đơn sức khỏe!</p>
+      <div class="chips">
+        <button class="chip" onclick="suggest('Gợi ý món thịt bò')">🥩 Món thịt bò</button>
+        <button class="chip" onclick="suggest('Món hải sản tươi ngon')">🦐 Hải sản tươi</button>
+        <button class="chip" onclick="suggest('Ăn kiêng giảm cân nên ăn gì?')">🥗 Ăn kiêng</button>
+        <button class="chip" onclick="suggest('Nấu nhanh 15 phút')">⚡ Nấu nhanh</button>
+        <button class="chip" onclick="suggest('Gian hàng nào bán thịt bò tươi uy tín?')">🏪 Gian hàng</button>
+      </div>
+    </div>`;
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text || loading) return;
+
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  // Make sure chat view is visible
+  if (currentTab === 'menu') { switchTab('chat'); }
+
+  addMsg('user', text);
+  convHistory.push({ role: 'user', content: text });
+
+  input.value = '';
+  input.style.height = 'auto';
+  loading = true;
+  document.getElementById('sendBtn').disabled = true;
+
+  const typingEl = addTyping();
+
+  try {
+    const res = await fetch(`${API}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        session_id: sessionId,
+        history: convHistory.slice(-6),
+      }),
+    });
+    const data = await res.json();
+    sessionId = data.session_id;
+    convHistory.push({ role: 'assistant', content: data.reply });
+    typingEl.remove();
+    renderBotMsg(data);
+  } catch (err) {
+    typingEl.remove();
+    addMsg('bot', `Lỗi kết nối: ${err.message}`);
+  }
+
+  loading = false;
+  document.getElementById('sendBtn').disabled = false;
+  scrollBot();
+}
+
+// ─── Render ──────────────────────────────────────────────
+function addMsg(role, text) {
+  const msgs = document.getElementById('msgs');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const av = role === 'user' ? '👤' : '🍜';
+  if (role === 'user') {
+    div.innerHTML = `<div class="av">${av}</div><div class="bubble">${esc(text)}</div>`;
+  } else {
+    div.innerHTML = `<div class="av">${av}</div><div class="bubble"><div class="reply-box">${esc(text)}</div></div>`;
+  }
+  msgs.appendChild(div);
+  scrollBot();
+}
+
+function addTyping() {
+  const msgs = document.getElementById('msgs');
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.innerHTML = `
+    <div class="av">🍜</div>
+    <div class="bubble">
+      <div class="typing">
+        <div class="tdot"></div><div class="tdot"></div><div class="tdot"></div>
+      </div>
+    </div>`;
+  msgs.appendChild(div);
+  scrollBot();
+  return div;
+}
+
+const INTENT_LABELS = {
+  greeting:'Chào hỏi', menu_planning:'Thực đơn',
+  health_advice:'Sức khỏe', cooking_instruction:'Công thức',
+  filter_quick:'Nấu nhanh', search_ingredient:'Nguyên liệu',
+  search_dish_type:'Loại món', special_occasion:'Dịp đặc biệt',
+  diet_type:'Chế độ ăn', buy_action:'Mua hàng',
+  search_general:'Tìm kiếm', search_shop:'Gian hàng',
+  family_group:'Gia đình', unknown:'...',
+};
+
+function renderBotMsg(data) {
+  const msgs = document.getElementById('msgs');
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+
+  const isShop = data.intent === 'search_shop';
+  const tagClass = isShop ? 'intent-tag shop-tag' : 'intent-tag';
+  const tagIcon = isShop ? '🏪' : '🍽️';
+
+  // Dishes section
+  let dishesHTML = '';
+  if (data.dishes && data.dishes.length > 0) {
+    const cards = data.dishes.map((d, i) => buildDishCard(d, i)).join('');
+    dishesHTML = `
+      <div class="dishes-section">
+        <div class="section-header">🍽️ Tìm thấy ${data.total_found} món ăn</div>
+        <div class="dishes-grid">${cards}</div>
+      </div>`;
+  }
+
+  // Shops section
+  let shopsHTML = '';
+  if (data.shops && data.shops.length > 0) {
+    const cards = data.shops.map(s => buildShopCard(s)).join('');
+    shopsHTML = `
+      <div class="dishes-section">
+        <div class="section-header">🏪 ${data.shops.length} gian hàng phù hợp</div>
+        <div class="shops-grid">${cards}</div>
+      </div>`;
+  }
+
+  div.innerHTML = `
+    <div class="av">🍜</div>
+    <div class="bubble">
+      <span class="${tagClass}">${tagIcon} ${INTENT_LABELS[data.intent] || data.intent}</span>
+      <div class="reply-box">${fmtReply(data.reply)}</div>
+      ${dishesHTML}
+      ${shopsHTML}
+    </div>`;
+
+  msgs.appendChild(div);
+  scrollBot();
+}
+
+function buildDishCard(dish, idx) {
+  const imgHTML = dish.image_url
+    ? `<img src="${esc(dish.image_url)}" alt="${esc(dish.dish_name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=dcard-placeholder>🍽️</div>'">`
+    : '<div class="dcard-placeholder">🍽️</div>';
+  const cal = dish.calories ? `${Math.round(dish.calories)} kcal` : '';
+  const ings = dish.recipe?.ingredients?.slice(0, 4).join(', ') || '';
+  const dishJson = JSON.stringify(dish).replace(/'/g, "&#39;");
+
+  return `
+    <div class="dcard" onclick='openRecipeFromDish(${dishJson})'>
+      <div class="dcard-img">
+        ${imgHTML}
+        ${cal ? `<span class="cal-pill">🔥 ${cal}</span>` : ''}
+      </div>
+      <div class="dcard-body">
+        <div class="dcard-name">${esc(dish.dish_name)}</div>
+        <div class="dcard-tags">
+          ${dish.cooking_time ? `<span class="dtag">⏱ ${esc(dish.cooking_time)}</span>` : ''}
+          ${dish.level ? `<span class="dtag">📊 ${esc(dish.level)}</span>` : ''}
+          ${dish.servings ? `<span class="dtag">👥 ${esc(dish.servings)}</span>` : ''}
+        </div>
+        ${ings ? `<div class="dcard-ing">🧅 ${esc(ings)}</div>` : ''}
+        ${dish.buy_action ? `<button class="buy-btn" onclick="event.stopPropagation();buyDish('${esc(dish.buy_action.dish_id)}','${esc(dish.dish_name)}')">🛒 Mua nguyên liệu</button>` : ''}
+      </div>
+    </div>`;
+}
+
+function buildShopCard(s) {
+  // Hỗ trợ cả 2 format: goods[] (search_stalls) và ingredients_available[] (get_stalls_for_dish)
+  const items = s.goods || s.ingredients_available || [];
+  const goodsHTML = items.slice(0, 6).map(g => `
+    <div class="good-pill">
+      ${esc(g.ingredient_name)}
+      <span class="good-price">${(g.price||0).toLocaleString('vi-VN')}đ/${esc(g.unit||'')}</span>
+      ${g.discount > 0 ? `<span class="good-disc">-${g.discount}%</span>` : ''}
+    </div>`).join('');
+
+  const imgTag = s.stall_image
+    ? `<img src="${esc(s.stall_image)}" alt="${esc(s.stall_name)}">`
+    : '🏪';
+
+  return `
+    <div class="scard">
+      <div class="scard-top">
+        <div class="scard-img">${imgTag}</div>
+        <div class="scard-info">
+          <div class="scard-name">${esc(s.stall_name)}</div>
+          <div class="scard-meta">
+            <span class="rating">⭐ ${(s.avr_rating||0).toFixed(1)}</span>
+            ${s.stall_location ? `· <span>📍 ${esc(s.stall_location)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      ${items.length > 0 ? `
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:500">
+          Đang bán (${items.length} sản phẩm):
+        </div>
+        <div class="scard-goods">${goodsHTML}</div>` : ''}
+    </div>`;
+}
+
+// ─── Recipe Modal ────────────────────────────────────────
+function openRecipeFromDish(dish) {
+  document.getElementById('modalTitle').textContent = dish.dish_name;
+  const recipe = dish.recipe || {};
+  let body = '';
+
+  body += '<div class="meta-row">';
+  if (dish.calories) body += `<div class="meta-chip">🔥 ${Math.round(dish.calories)} kcal</div>`;
+  if (dish.cooking_time) body += `<div class="meta-chip">⏱ ${esc(dish.cooking_time)}</div>`;
+  if (dish.level) body += `<div class="meta-chip">📊 ${esc(dish.level)}</div>`;
+  if (dish.servings) body += `<div class="meta-chip">👥 ${esc(dish.servings)}</div>`;
+  if (dish.health_goal) body += `<div class="meta-chip">🎯 ${esc(dish.health_goal)}</div>`;
+  body += '</div>';
+
+  if (recipe.ingredients && recipe.ingredients.length > 0) {
+    body += `<div class="rsec">
+      <h3>🧅 Nguyên liệu <span style="font-size:11px;color:var(--muted);font-weight:400">(nhấn để xem gian hàng)</span></h3>
+      <ul>${recipe.ingredients.map(ing => `
+        <li onclick="showStallsForIngredient('${esc(ing)}', this)">
+          <span style="flex:1">${esc(ing)}</span>
+          <span style="font-size:11px;color:var(--accent)">🏪 Tìm mua →</span>
+        </li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  if (recipe.preparation) {
+    body += `<div class="rsec"><h3>🔪 Sơ chế</h3><div class="rtext">${esc(recipe.preparation)}</div></div>`;
+  }
+  if (recipe.steps) {
+    body += `<div class="rsec"><h3>👨‍🍳 Các bước nấu</h3><div class="rtext">${esc(recipe.steps)}</div></div>`;
+  }
+  if (recipe.serving_tips) {
+    body += `<div class="rsec"><h3>🍽️ Cách dùng</h3><div class="rtext">${esc(recipe.serving_tips)}</div></div>`;
+  }
+
+  body += `
+    <button class="modal-buy-btn" onclick="loadStalls('${esc(dish.dish_id)}', this, false)">
+      🛒 Xem gian hàng bán nguyên liệu
+    </button>
+    <div id="stalls-${esc(dish.dish_id)}"></div>`;
+
+  document.getElementById('modalBody').innerHTML = body;
+  document.getElementById('modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function closeModalOutside(e) {
+  if (e.target === document.getElementById('modal')) closeModal();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ─── Stalls loaders ──────────────────────────────────────
+async function loadStalls(dishId, btnEl, openModal) {
+  // Nếu openModal=true → mở modal trước, load stalls vào chat
+  if (openModal) {
+    // Find dish from last batch
+    showToast('⏳ Đang tìm gian hàng...');
+    try {
+      const res = await fetch(`${API}/dishes/${dishId}/stalls`);
+      const data = await res.json();
+      if (data.stalls && data.stalls.length > 0) {
+        // Render như chat message
+        renderStallsInChat(data.stalls, dishId);
+        showToast(`🏪 Tìm thấy ${data.stalls.length} gian hàng!`);
+      } else {
+        showToast('😔 Chưa có gian hàng bán nguyên liệu món này.');
+      }
+    } catch (e) { showToast('Lỗi: ' + e.message); }
+    return;
+  }
+
+  // Modal inline
+  const container = document.getElementById(`stalls-${dishId}`);
+  if (!container) return;
+  btnEl.disabled = true;
+  btnEl.innerHTML = '<span class="spin"></span> Đang tìm gian hàng...';
+
+  try {
+    const res = await fetch(`${API}/dishes/${dishId}/stalls`);
+    const data = await res.json();
+
+    btnEl.style.display = 'none';
+
+    if (!data.stalls || data.stalls.length === 0) {
+      container.innerHTML = `<p style="color:var(--muted);font-size:13px;margin-top:10px">Chưa có gian hàng bán nguyên liệu món này.</p>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div style="margin-top:14px">
+        <div class="section-header" style="margin-bottom:10px">
+          🏪 ${data.total_stalls} gian hàng có nguyên liệu
+        </div>
+        <div class="shops-grid">${data.stalls.map(s => buildShopCard(s)).join('')}</div>
+      </div>`;
+  } catch (err) {
+    container.innerHTML = `<p style="color:var(--red);font-size:13px;margin-top:8px">Lỗi: ${err.message}</p>`;
+    btnEl.disabled = false;
+    btnEl.innerHTML = '🛒 Xem gian hàng bán nguyên liệu';
+  }
+}
+
+function renderStallsInChat(stalls, dishId) {
+  const msgs = document.getElementById('msgs');
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.innerHTML = `
+    <div class="av">🏪</div>
+    <div class="bubble">
+      <span class="intent-tag shop-tag">🏪 Gian hàng</span>
+      <div class="reply-box" style="margin-bottom:12px">
+        Tìm thấy <strong>${stalls.length}</strong> gian hàng có nguyên liệu cho món bạn chọn:
+      </div>
+      <div class="shops-grid">${stalls.map(s => buildShopCard(s)).join('')}</div>
+    </div>`;
+  msgs.appendChild(div);
+  scrollBot();
+}
+
+async function showStallsForIngredient(name, liEl) {
+  const existing = liEl.nextElementSibling;
+  if (existing && existing.classList.contains('stall-panel')) {
+    existing.remove(); return;
+  }
+
+  const panel = document.createElement('div');
+  panel.className = 'stall-panel';
+  panel.innerHTML = `<div style="color:var(--muted);font-size:12.5px">⏳ Đang tìm gian hàng bán <strong>${esc(name)}</strong>...</div>`;
+  liEl.insertAdjacentElement('afterend', panel);
+
+  try {
+    const res = await fetch(`${API}/ingredients/stalls?name=${encodeURIComponent(name)}`);
+    const data = await res.json();
+
+    if (!data.stalls || data.stalls.length === 0) {
+      panel.innerHTML = `<div style="color:var(--muted);font-size:12.5px">😔 Chưa có gian hàng bán <strong>${esc(name)}</strong></div>`;
+      return;
+    }
+
+    panel.innerHTML = `
+      <div style="font-size:11.5px;font-weight:600;color:var(--muted);margin-bottom:8px">
+        🏪 ${data.total_stalls} gian hàng bán <strong style="color:var(--text)">${esc(name)}</strong>
+      </div>
+      ${data.stalls.map(s => `
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+          <div style="width:34px;height:34px;border-radius:7px;overflow:hidden;background:var(--s3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px">
+            ${s.stall_image ? `<img src="${esc(s.stall_image)}" style="width:100%;height:100%;object-fit:cover">` : '🏪'}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:600">${esc(s.stall_name)}</div>
+            <div style="font-size:11px;color:var(--muted)">⭐ ${(s.avr_rating||0).toFixed(1)} · ${esc(s.stall_location||'')}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:13px;font-weight:700;color:var(--accent)">${(s.price||0).toLocaleString('vi-VN')}đ/${esc(s.unit||'')}</div>
+            ${s.discount > 0 ? `<div style="font-size:11px;color:var(--green)">-${s.discount}% giảm giá</div>` : ''}
+            <div style="font-size:11px;color:var(--muted)">Còn ${s.inventory||0} ${esc(s.unit||'')}</div>
+          </div>
+        </div>`).join('')}`;
+  } catch (err) {
+    panel.innerHTML = `<div style="color:var(--red);font-size:12.5px">Lỗi: ${err.message}</div>`;
+  }
+}
+
+function buyDish(dishId, dishName) {
+  console.log(`[Buy] dish_id=${dishId}`);
+  showToast(`Đã thêm "${dishName}" vào giỏ hàng!`);
+}
+
+// ─── Utils ───────────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = String(str);
+  return d.innerHTML;
+}
+
+function fmtReply(text) {
+  if (!text) return '';
+  let h = esc(text);
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  h = h.replace(/\n/g, '<br>');
+  return h;
+}
+
+function scrollBot() {
+  const el = document.getElementById('chatScroll');
+  requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
