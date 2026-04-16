@@ -313,6 +313,7 @@ def generate_random_id(prefix: str, length: int = 6) -> str:
 
 def create_tieu_thuong(db: Session, manage_id: str, merchant_in: MerchantCreate):
     from app.models.models import User, Stall, StallFee, MarketManagement, Payment
+    from app.utils.password import hash_password
     from datetime import datetime
     import decimal
 
@@ -323,14 +324,16 @@ def create_tieu_thuong(db: Session, manage_id: str, merchant_in: MerchantCreate)
 
     # 2. Tạo User mới (Tiểu thương)
     user_id = generate_random_id("ND", length=4)
+    hashed_pwd = hash_password("123456")
+    login_name = f"tt_{user_id.lower()}"
     new_user = User(
         user_id=user_id,
         user_name=merchant_in.ten_nguoi_dung,
         phone=merchant_in.so_dien_thoai,
         address=merchant_in.dia_chi,
         role="nguoi_ban", # standard role for merchant
-        login_name=f"tt_{user_id.lower()}",
-        password="password_account_default",  # Demo password
+        login_name=login_name,
+        password=hashed_pwd,
         gender="O", # Other/Not specified
         active_status="mo_cua",
         approval_status=1
@@ -360,8 +363,8 @@ def create_tieu_thuong(db: Session, manage_id: str, merchant_in: MerchantCreate)
             manage_id=manage_id,
             stall_location=merchant_in.loai_hang_hoa,
             signup_date=datetime.now().date(),
-            grid_col=0,
-            grid_row=0,
+            grid_col=merchant_in.grid_col or 0,
+            grid_row=merchant_in.grid_row or 0,
             grid_floor=1
         )
         db.add(stall)
@@ -397,9 +400,12 @@ def create_tieu_thuong(db: Session, manage_id: str, merchant_in: MerchantCreate)
     
     return {
         "success": True,
+        "message": f"Tạo thành công. Tài khoản: {login_name} - Mật khẩu: 123456",
         "data": {
             "user_id": new_user.user_id,
             "user_name": new_user.user_name,
+            "login_name": login_name,
+            "default_password": "123456",
             "stall_id": stall.stall_id,
             "stall_name": stall.stall_name
         }
@@ -695,60 +701,28 @@ def update_stall_status(db: Session, stall_id: str, status: str, note: Optional[
     db.commit()
 
     return {"success": True, "message": "Cập nhật trạng thái thành công"}
-def list_pending_sellers(db: Session, page: int = 1, limit: int = 10, search: Optional[str] = None):
-    offset = (page - 1) * limit
-
-    query = db.query(User).filter(
-        User.role == "nguoi_ban",
-        User.approval_status == 0
-    )
-
-    if search:
-        search_filter = f"%{search}%"
-        query = query.filter(
-            (User.user_name.ilike(search_filter)) |
-            (User.phone.ilike(search_filter))
-        )
-
-    total = query.count()
-    rows = query.offset(offset).limit(limit).all()
-
-    data = [
-        {
-            "user_id": u.user_id,
-            "user_name": u.user_name,
-            "phone": u.phone,
-            "address": u.address,
-            "approval_status": u.approval_status
-        }
-        for u in rows
-    ]
-
-    return {
-        "success": True,
-        "data": data,
-        "meta": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "total_pages": (total + limit - 1) // limit
-        }
-    }
 
 
-def approve_seller(db: Session, user_id: str):
-    user = db.query(User).filter(
-        User.user_id == user_id,
-        User.role == "nguoi_ban"
-    ).first()
-
-    if not user:
-        raise ValueError("Không tìm thấy người bán")
-
-    if user.approval_status == 1:
-        raise ValueError("Người dùng đã được duyệt rồi")
-
-    user.approval_status = 1
-    db.commit()
-
-    return {"success": True, "message": "Duyệt người bán thành công"}
+def get_map_stalls(db: Session, manage_id: Optional[str] = None):
+    from app.models.models import Stall, User
+    
+    query = db.query(Stall, User).join(User, User.user_id == Stall.user_id)
+    if manage_id:
+        query = query.filter(Stall.manage_id == manage_id)
+        
+    stalls = query.all()
+    
+    result = []
+    for stall, user in stalls:
+        result.append({
+            "stall_id": stall.stall_id,
+            "ten_gian_hang": stall.stall_name,
+            "nguoi_ban": user.user_name,
+            "x_col": stall.grid_col or 0,
+            "y_row": stall.grid_row or 0,
+            "loai_hang": stall.stall_location,
+            "trang_thai": user.active_status,
+            "sdt": user.phone
+        })
+        
+    return result

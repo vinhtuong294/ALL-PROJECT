@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
 import '../../feature/shipper/data/models/shipper_order_model.dart';
+import '../../feature/shipper/data/models/market_map_stall.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ShipperApiService {
   final Dio _dio;
-  final String _baseUrl = 'http://207.180.233.84:8000';
+  final String _baseUrl = 'http://localhost:8000'; // 'http://207.180.233.84:8000';
 
   ShipperApiService() : _dio = Dio() {
     _dio.options.baseUrl = _baseUrl;
@@ -98,13 +99,27 @@ class ShipperApiService {
 
   Future<bool> updateOrderStatus(String orderId, String status) async {
     try {
-      final response = await _dio.patch('/api/shipper/orders/$orderId/status', data: {
-        'tinh_trang_don_hang': status
+      final response = await _dio.put('/api/shipper/orders/$orderId/status', data: {
+        'status': status
       });
       return response.statusCode == 200;
     } catch (e) {
-      throw Exception('Không thể cập nhật trạng thái đơn: $e');
+      throw Exception('Lỗi cập nhật trạng thái: $e');
+    }
+  }
+
+  Future<List<MarketMapStall>> getMapStalls() async {
+    try {
+      final response = await _dio.get('/api/quan-ly-cho/stalls/map');
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final data = response.data['data'] as List?;
+        if (data != null) {
+          return data.map((e) => MarketMapStall.fromJson(e)).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      throw Exception('Không thể tải bản đồ: $e');
     }
   }
 }
-

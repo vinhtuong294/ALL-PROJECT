@@ -159,8 +159,6 @@ class _SignUpViewState extends State<SignUpView> {
               keyboardType: TextInputType.emailAddress,
               validator: (value) => context.read<SignUpCubit>().validateEmail(value),
             ),
-            const SizedBox(height: 20),
-            _buildRoleSelection(),
             const SizedBox(height: 25),
             _buildSignUpButton(),
             const SizedBox(height: 15),
@@ -313,69 +311,7 @@ class _SignUpViewState extends State<SignUpView> {
     );
   }
 
-  Widget _buildRoleSelection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Chọn Vai Trò:',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF000000),
-          ),
-        ),
-        const SizedBox(height: 10),
-        BlocBuilder<SignUpCubit, SignUpState>(
-          buildWhen: (prev, curr) => curr is SignUpRoleChanged,
-          builder: (context, state) {
-            final selectedRole = context.read<SignUpCubit>().selectedRole;
-            return Row(
-              children: [
-                _buildRoleOption('nguoi_mua', 'Người Mua', selectedRole == 'nguoi_mua'),
-                const SizedBox(width: 20),
-                _buildRoleOption('nguoi_ban', 'Người Bán', selectedRole == 'nguoi_ban'),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
 
-  Widget _buildRoleOption(String role, String label, bool isSelected) {
-    return GestureDetector(
-      onTap: () => context.read<SignUpCubit>().setRole(role),
-      child: Row(
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? const Color(0xFF00B40F) : Colors.grey,
-                width: 2,
-              ),
-              color: isSelected ? const Color(0xFF00B40F) : Colors.transparent,
-            ),
-            child: isSelected
-                ? const Icon(Icons.check, size: 14, color: Colors.white)
-                : null,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 16,
-              color: isSelected ? const Color(0xFF00B40F) : Colors.black87,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildSignUpButton() {
     return BlocBuilder<SignUpCubit, SignUpState>(

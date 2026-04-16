@@ -7,6 +7,6 @@ def create_notification(db: Session, user_id: str, title: str, body: str, data: 
         user_id=user_id,
         title=title,
         body=body,
-        data=json.dumps(data)
+        data=data
     )
     db.add(notif)

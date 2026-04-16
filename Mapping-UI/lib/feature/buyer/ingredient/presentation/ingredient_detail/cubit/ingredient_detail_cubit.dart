@@ -295,6 +295,61 @@ class IngredientDetailCubit extends Cubit<IngredientDetailState> {
     );
   }
 
+  /// Mua ngay sản phẩm liên quan/gợi ý - Fetch chi tiết và nhảy thẳng qua trang thanh toán
+  Future<void> buyNowRelatedProduct(BuildContext context, RelatedProduct product) async {
+    if (_nguyenLieuService == null) return;
+    
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFF00B40F))),
+    );
+    
+    try {
+      final response = await _nguyenLieuService!.getNguyenLieuDetail(product.maNguyenLieu ?? '');
+      
+      if (context.mounted) Navigator.pop(context); // hide loading
+      
+      if (response.sellers.data.isNotEmpty) {
+        final detail = response.data;
+        final seller = response.sellers.data.first;
+        
+        if (context.mounted) {
+          Navigator.pushNamed(
+            context,
+            '/payment',
+            arguments: {
+              'isBuyNow': true,
+              'maNguyenLieu': product.maNguyenLieu,
+              'tenNguyenLieu': product.name,
+              'maGianHang': seller.maGianHang,
+              'tenGianHang': seller.tenGianHang,
+              'hinhAnh': product.imagePath,
+              'gia': seller.giaCuoi?.isNotEmpty == true && seller.giaCuoi != 'null' ? seller.giaCuoi : seller.giaGoc.toString(),
+              'donVi': seller.donViBan ?? detail.donVi ?? 'KG',
+              'soLuong': 1,
+            },
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sản phẩm hiện không có gian hàng bán')),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context);
+      print('⚠️ Lỗi mua ngay: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lỗi khi tải thông tin sản phẩm')),
+        );
+      }
+    }
+  }
+
   /// Chat with shop
   void chatWithShop() {
     // Implement chat logic

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../market_map_screen.dart';
 
 class MapTab extends StatelessWidget {
   const MapTab({super.key});
@@ -12,6 +13,25 @@ class MapTab extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MarketMapScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.map, color: Colors.white),
+                  label: const Text('Mở Bản Đồ Chi Tiết (Sống)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2F8000),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               _buildMarketMap(context),
               const SizedBox(height: 16),
               _buildLegend(),

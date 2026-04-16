@@ -2,9 +2,18 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_storage.dart';
 
+/// Token hết hạn hoặc không hợp lệ
+class UnauthorizedException implements Exception {
+  const UnauthorizedException();
+  @override
+  String toString() => 'Phiên đăng nhập hết hạn';
+}
+
 class ApiService {
   static const String baseUrl = 'http://localhost:8000';
-  static const String coreBaseUrl = 'http://207.180.233.84:8000';
+  static const String coreBaseUrl = 'http://localhost:8000'; // Local dev
+
+  static const _timeout = Duration(seconds: 12);
 
   // ── helpers ──
   static Future<Map<String, String>> _headers() async {
@@ -118,9 +127,10 @@ class ApiService {
     final params = {'page': '$page', 'limit': '$limit'};
     if (status != null) params['tinh_trang_don_hang'] = status;
     final uri = Uri.parse('$coreBaseUrl/api/shipper/orders/available').replace(queryParameters: params);
-    final res = await http.get(uri, headers: await _headers());
+    final res = await http.get(uri, headers: await _headers()).timeout(_timeout);
     if (res.statusCode == 200) return _decode(res);
-    throw Exception('Lỗi lấy đơn hàng có sẵn');
+    if (res.statusCode == 401 || res.statusCode == 403) throw const UnauthorizedException();
+    throw Exception('Lỗi lấy đơn hàng có sẵn (${res.statusCode})');
   }
 
   /// GET /api/shipper/orders/my
@@ -128,9 +138,10 @@ class ApiService {
     final params = {'page': '$page', 'limit': '$limit'};
     if (status != null) params['tinh_trang_don_hang'] = status;
     final uri = Uri.parse('$coreBaseUrl/api/shipper/orders/my').replace(queryParameters: params);
-    final res = await http.get(uri, headers: await _headers());
+    final res = await http.get(uri, headers: await _headers()).timeout(_timeout);
     if (res.statusCode == 200) return _decode(res);
-    throw Exception('Lỗi lấy đơn hàng của tôi');
+    if (res.statusCode == 401 || res.statusCode == 403) throw const UnauthorizedException();
+    throw Exception('Lỗi lấy đơn hàng của tôi (${res.statusCode})');
   }
 
   /// POST /api/shipper/orders/accept

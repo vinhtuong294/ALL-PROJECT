@@ -60,8 +60,7 @@ class CartRepository:
         cart = Cart(
             cart_id=str(uuid.uuid4())[:8],
             buyer_id=buyer_id,
-            cart_date=datetime.utcnow(),
-            update_cart_date=datetime.utcnow()  # thêm dòng này
+            cart_date=datetime.utcnow()
         )
         db.add(cart)
         db.commit()
@@ -229,7 +228,6 @@ class CartRepository:
             db.add(new_detail)
 
 
-        cart.update_cart_date = datetime.utcnow()
         db.commit()
 
 
@@ -459,10 +457,11 @@ class CartRepository:
             order_id=str(uuid.uuid4())[:10],
             payment_id=payment.payment_id,
             buyer_id=buyer_id,
-            total_amount=total_amount,  # tạm thời chưa có ship
+            total_amount=int(total_amount),  # tạm thời chưa có ship
             delivery_address=body.delivery_address,
             delivery_time=delivery_time,
-            distance_km=distance
+            distance_km=distance,
+            time_slot_id=body.time_slot_id
         )
         db.add(order)
         db.flush()
@@ -494,7 +493,7 @@ class CartRepository:
         # UPDATE TOTAL (SAU KHI CÓ SHIP)
         # =========================
         total_amount += shipping_fee
-        order.total_amount = total_amount
+        order.total_amount = int(total_amount)
 
         # =========================
         # XÓA CART ITEMS ĐÃ CHECKOUT
@@ -533,19 +532,21 @@ class CartRepository:
                     buyer = db.query(Buyer).filter(Buyer.buyer_id == buyer_id).first()
                     buyer_name = buyer.user.user_name if buyer and buyer.user else "Khách hàng"
 
-                    create_notification(
-                        db=db,
-                        user_id=seller.user_id,
-                        title="🛒 Bạn có đơn hàng mới!",
-                        body=f"Người mua: {buyer_name} | Sản phẩm: {', '.join(item_names)} | Giao lúc: {str(delivery_time)}",
-                        data={
-                            "type": "new_order",
-                            "order_id": order.order_id,
-                            "screen": "confirm_order"
-                        }
-                    )
-
-        db.commit()
+                    try:
+                        create_notification(
+                            db=db,
+                            user_id=seller.user_id.strip(),
+                            title="🛒 Bạn có đơn hàng mới!",
+                            body=f"Người mua: {buyer_name} | Sản phẩm: {', '.join(item_names)} | Giao lúc: {str(delivery_time)}",
+                            data={
+                                "type": "new_order",
+                                "order_id": order.order_id,
+                                "screen": "confirm_order"
+                            }
+                        )
+                    except Exception as e:
+                        print(f"Warning: Failed to create notification: {e}")
+                        db.rollback()
         
         
         # =========================

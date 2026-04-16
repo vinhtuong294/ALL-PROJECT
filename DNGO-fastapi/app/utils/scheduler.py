@@ -44,10 +44,10 @@ def auto_create_monthly_fees():
                 db.add(new_fee)
         
         db.commit()
-        print(f"✅ Đã tạo phí tháng {current_month} thành công")
+        print(f"[OK] Da tao phi thang {current_month} thanh cong")
     except Exception as e:
         db.rollback()
-        print(f"❌ Lỗi tạo phí: {e}")
+        print(f"[ERROR] Loi tao phi: {e}")
     finally:
         db.close()
 

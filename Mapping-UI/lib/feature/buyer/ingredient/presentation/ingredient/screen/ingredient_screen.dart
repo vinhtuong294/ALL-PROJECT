@@ -426,7 +426,7 @@ class _IngredientViewState extends State<_IngredientView> {
       hasDiscount: product.hasDiscount,
       originalPrice: product.originalPrice,
       onAddToCart: navigateToDetail, // Navigate để chọn gian hàng trước khi thêm
-      onBuyNow: navigateToDetail, // Navigate để chọn gian hàng trước khi mua
+      onBuyNow: () => context.read<IngredientCubit>().buyNow(context, product), // Gọi hàm buyNow để nhảy thẳng thanh toán
       onTap: navigateToDetail,
     );
   }

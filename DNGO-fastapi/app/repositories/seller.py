@@ -330,9 +330,10 @@ def confirm_order_detail(db: Session, user_id: str, order_id: str, ingredient_id
     detail.detail_status = action
     db.flush()
 
-    # Kiểm tra tất cả order_detail của đơn hàng này
+    # Kiểm tra tất cả order_detail của đơn hàng này (Bỏ qua phí ship NLQD01)
     all_details = db.query(OrderDetail).filter(
-        OrderDetail.order_id == order_id
+        OrderDetail.order_id == order_id,
+        OrderDetail.ingredient_id != "NLQD01"
     ).all()
 
     all_approved = all(d.detail_status == "da_duyet" for d in all_details)

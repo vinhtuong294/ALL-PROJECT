@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../../core/services/api_service.dart';
+import '../../../../../core/services/auth_storage.dart';
 import '../../../../../core/utils/helpers.dart';
 import '../order_detail_page.dart';
+import '../../../../auth/presentation/pages/login_screen.dart';
 
 class OrdersTab extends StatefulWidget {
   const OrdersTab({super.key});
@@ -11,7 +14,7 @@ class OrdersTab extends StatefulWidget {
   State<OrdersTab> createState() => _OrdersTabState();
 }
 
-class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMixin {
+class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
   List<dynamic> _available = [];
   List<dynamic> _myOrders = [];
   bool _loadingAvail = true;
@@ -20,31 +23,203 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
   int _totalMy = 0;
   Set<String> _acceptingIds = {};
 
+  // ─── Auto-polling ────────────────────────────────────────────
+  Timer? _pollingTimer;
+  Set<String> _knownOrderIds = {};
+  bool _hasNewOrders = false;
+  int _newOrderCount = 0;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
+
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadAvailable();
+
+    // Pulse animation cho badge
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _loadAvailable(isInitial: true);
     _loadMyOrders();
+
+    // Bắt đầu polling mỗi 10 giây
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _pollNewOrders();
+    });
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
+    _pulseController.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadAvailable() async {
+  /// Poll silent — không show loading spinner
+  Future<void> _pollNewOrders() async {
+    if (!mounted) return;
+    try {
+      final data = await ApiService.getAvailableOrders(page: 1, limit: 50);
+      final items = (data['items'] ?? []) as List<dynamic>;
+      final newIds = items.map((o) => o['ma_don_hang']?.toString() ?? '').toSet();
+
+      if (_knownOrderIds.isEmpty) {
+        _knownOrderIds = newIds;
+        return;
+      }
+
+      final brandNew = newIds.difference(_knownOrderIds);
+      if (brandNew.isNotEmpty && mounted) {
+        setState(() {
+          _available = items;
+          _totalAvail = data['total'] ?? items.length;
+          _hasNewOrders = true;
+          _newOrderCount = brandNew.length;
+          _knownOrderIds = newIds;
+        });
+        _showNewOrderAlert(brandNew.length);
+      } else {
+        _knownOrderIds = newIds;
+        if (mounted) {
+          setState(() {
+            _available = items;
+            _totalAvail = data['total'] ?? items.length;
+          });
+        }
+      }
+    } on UnauthorizedException {
+      _pollingTimer?.cancel(); // Dừng polling khi token hết hạn
+      await _handleUnauthorized();
+    } catch (_) {
+      // Silent fail
+    }
+  }
+
+  void _showNewOrderAlert(int count) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 5),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        content: GestureDetector(
+          onTap: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            _tabController.animateTo(0);
+            setState(() { _hasNewOrders = false; _newOrderCount = 0; });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1B5E20), Color(0xFF2F8000)],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2F8000).withOpacity(0.5),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.flash_on, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        count == 1 ? '🔔 Có đơn mới!' : '🔔 $count đơn hàng mới!',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Text(
+                        'Nhấn để xem ngay →',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  /// Xử lí khi token hết hạn: xóa token + chuyển về Login
+  Future<void> _handleUnauthorized() async {
+    await AuthStorage.clear();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(children: [
+          Icon(Icons.lock_outline, color: Colors.white, size: 18),
+          SizedBox(width: 8),
+          Text('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.'),
+        ]),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+    await Future.delayed(const Duration(seconds: 1));
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _loadAvailable({bool isInitial = false}) async {
     setState(() => _loadingAvail = true);
     try {
       final data = await ApiService.getAvailableOrders(page: 1, limit: 50);
-      if (mounted) setState(() {
-        _available = data['items'] ?? [];
-        _totalAvail = data['total'] ?? 0;
-        _loadingAvail = false;
-      });
+      if (mounted) {
+        final items = (data['items'] ?? []) as List<dynamic>;
+        final ids = items.map((o) => o['ma_don_hang']?.toString() ?? '').toSet();
+        setState(() {
+          _available = items;
+          _totalAvail = data['total'] ?? 0;
+          _loadingAvail = false;
+        });
+        if (isInitial || _knownOrderIds.isEmpty) {
+          _knownOrderIds = ids;
+        }
+        if (!isInitial) {
+          setState(() { _hasNewOrders = false; _newOrderCount = 0; });
+          _knownOrderIds = ids;
+        }
+      }
+    } on UnauthorizedException {
+      await _handleUnauthorized();
     } catch (e) {
       if (mounted) setState(() => _loadingAvail = false);
     }
@@ -59,6 +234,8 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
         _totalMy = data['total'] ?? 0;
         _loadingMy = false;
       });
+    } on UnauthorizedException {
+      await _handleUnauthorized();
     } catch (e) {
       if (mounted) setState(() => _loadingMy = false);
     }
@@ -257,17 +434,54 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 20, left: 20, right: 20, bottom: 20),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 20,
+        left: 20, right: 20, bottom: 20,
+      ),
       color: const Color(0xFF2F8000),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Đơn hàng', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Đơn hàng', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+              if (_hasNewOrders)
+                ScaleTransition(
+                  scale: _pulseAnim,
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.flash_on, color: Colors.white, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$_newOrderCount đơn mới!',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
           GestureDetector(
-            onTap: () { _loadAvailable(); _loadMyOrders(); },
+            onTap: () {
+              _loadAvailable();
+              _loadMyOrders();
+            },
             child: Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: const Icon(Icons.refresh, color: Colors.white, size: 22),
             ),
           ),

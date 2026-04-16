@@ -191,6 +191,8 @@ def accept_order(db: Session, shipper_id: str, order_id: str) -> Dict[str, Any]:
 
 
     if order.order_status != "da_xac_nhan":
+        import logging
+        logging.error(f"DEBUG: Shipper accept_order found order_status='{order.order_status}' for order_id='{order_id}'")
         raise ValueError("Chỉ có thể nhận đơn hàng đã xác nhận")
 
 

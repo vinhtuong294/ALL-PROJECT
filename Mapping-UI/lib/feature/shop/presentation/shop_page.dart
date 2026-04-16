@@ -492,12 +492,20 @@ class _ShopPageState extends State<ShopPage> {
               ),
               child: GestureDetector(
                 onTap: () {
-                  context.read<ShopCubit>().addToCart(product.productId, 1);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Đã thêm ${product.productName} vào giỏ'),
-                      duration: const Duration(seconds: 1),
-                    ),
+                  Navigator.pushNamed(
+                    context,
+                    '/payment',
+                    arguments: {
+                      'isBuyNow': true,
+                      'maNguyenLieu': product.productId,
+                      'tenNguyenLieu': product.productName,
+                      'maGianHang': state.shopInfo.shopId,
+                      'tenGianHang': state.shopInfo.shopName,
+                      'hinhAnh': product.productImage,
+                      'gia': product.price.toString(),
+                      'donVi': 'KG', // mặc định là KG do API không trả về ở mode này
+                      'soLuong': 1,
+                    },
                   );
                 },
                 child: Container(

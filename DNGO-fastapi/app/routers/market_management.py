@@ -205,6 +205,17 @@ def get_dashboard_v2(
     return mm_repo.get_dashboard_v2(db, manage_id)
 
 
+@router.get("/stalls/map")
+def get_map_stalls(
+    db: Session = Depends(get_db),
+):
+    try:
+        data = mm_repo.get_map_stalls(db, manage_id=None)
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @router.post("/stalls/{stall_id}/status")
 def update_stall_status(
     stall_id: str,
@@ -217,25 +228,3 @@ def update_stall_status(
         raise HTTPException(404, "Không tìm thấy gian hàng")
     return result
 
-@router.get("/pending-sellers")
-def list_pending_sellers(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
-    search: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(allow("quan_ly_cho"))
-):
-    return mm_repo.list_pending_sellers(db, page, limit, search)
-
-
-@router.patch("/approve-seller/{user_id}")
-def approve_seller(
-    user_id: str,
-    db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(allow("quan_ly_cho"))
-):
-    """Duyệt tiểu thương (approval_status=1)"""
-    result = mm_repo.approve_seller(db, user_id)
-    if not result:
-        raise HTTPException(404, "Không tìm thấy tiểu thương")
-    return {"success": True, "message": "Duyệt người bán thành công"}

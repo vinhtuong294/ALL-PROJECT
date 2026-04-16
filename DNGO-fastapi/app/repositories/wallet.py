@@ -192,7 +192,7 @@ class WalletRepository:
             Order, Order.order_id == OrderDetail.order_id
         ).filter(
             OrderDetail.stall_id == stall_id,
-            Order.order_status == "da_giao",
+            Order.order_status.in_(["da_giao", "hoan_thanh"]),
         ).group_by(OrderDetail.order_id, Order.order_time)
         q, _, __ = _apply_date_filter(q, Order.order_time, filter_type, from_date, to_date)
 
@@ -277,7 +277,7 @@ class WalletRepository:
         ).filter(
             OrderDetail.ingredient_id == SHIP_ID,
             Consolidation.shipper_id == shipper.shipper_id,
-            Order.order_status == "da_giao",
+            Order.order_status.in_(["da_giao", "hoan_thanh"]),
         ).group_by(OrderDetail.order_id, Order.order_time)
         q, _, __ = _apply_date_filter(q, Order.order_time, filter_type, from_date, to_date)
 

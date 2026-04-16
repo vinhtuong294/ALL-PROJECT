@@ -904,8 +904,7 @@ class _IngredientDetailView extends StatelessWidget {
           debugPrint('Thêm vào giỏ hàng: ${product.name}');
         },
         onBuyNow: () {
-          // Buy now - TODO: implement
-          debugPrint('Mua ngay: ${product.name}');
+          context.read<IngredientDetailCubit>().buyNowRelatedProduct(context, product);
         },
       ),
     );
