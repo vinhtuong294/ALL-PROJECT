@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../feature/shipper/presentation/pages/main_screen.dart';
@@ -11,6 +10,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _loading = false;
@@ -18,10 +18,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscure = true;
 
   Future<void> _onLogin() async {
-    if (_usernameCtrl.text.isEmpty || _passwordCtrl.text.isEmpty) {
-      setState(() => _error = 'Vui lòng nhập đầy đủ thông tin');
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+    
     setState(() { _loading = true; _error = null; });
     try {
       await ApiService.login(_usernameCtrl.text.trim(), _passwordCtrl.text);
@@ -34,6 +32,21 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Đăng nhập thất bại'),
+            content: Text(_error!),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Đóng'),
+              ),
+            ],
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -49,129 +62,139 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          Positioned(
-            left: 0, right: 0, bottom: -50,
-            child: Opacity(
-              opacity: 0.9,
-              child: Image.network(
-                'https://t3.ftcdn.net/jpg/04/47/98/69/360_F_447986940_l6TngbSOT1q8Ips4Ggq3q3PqOa8XZ0N5.jpg',
-                fit: BoxFit.cover,
-                height: MediaQuery.of(context).size.height * 0.6,
-                errorBuilder: (c, e, s) => Container(height: MediaQuery.of(context).size.height * 0.6, color: Colors.white),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [Colors.white, Colors.white.withValues(alpha: 0.6), Colors.transparent],
-                  stops: const [0.4, 0.6, 1.0],
+      backgroundColor: const Color(0xFFF3F4F6),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(
+                  Icons.local_shipping_outlined,
+                  size: 80,
+                  color: Color(0xFF1CB02A),
                 ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  const SizedBox(height: 60),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                const SizedBox(height: 24),
+                Text(
+                  'DNGO Shipper',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2F8000),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Đăng nhập để nhận và giao đơn hàng',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 48),
+                Form(
+                  key: _formKey,
+                  child: Column(
                     children: [
-                      Image.network('https://cdn-icons-png.flaticon.com/512/3753/3753061.png', height: 48, color: const Color(0xFF2F8000),
-                        errorBuilder: (c, e, s) => const Icon(Icons.shopping_cart, size: 48, color: Color(0xFF2F8000)),
+                      TextFormField(
+                        controller: _usernameCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Tên đăng nhập',
+                          prefixIcon: const Icon(Icons.person_outline),
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Vui lòng nhập tên đăng nhập';
+                          }
+                          return null;
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      const Text('DNGo', style: TextStyle(color: Color(0xFF1E3A8A), fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _passwordCtrl,
+                        obscureText: _obscure,
+                        decoration: InputDecoration(
+                          labelText: 'Mật khẩu',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscure ? Icons.visibility_off : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscure = !_obscure;
+                              });
+                            },
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Vui lòng nhập mật khẩu';
+                          }
+                          return null;
+                        },
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 60),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.lightBlue.shade100, width: 1.5),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Column(children: [
-                                  const Text('Đăng nhập', style: TextStyle(color: Color(0xFF2F8000), fontWeight: FontWeight.bold, fontSize: 16)),
-                                  const SizedBox(height: 4),
-                                  Container(width: 40, height: 2, color: Colors.red),
-                                ]),
-                                const Text('Đăng ký', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold, fontSize: 16)),
-                              ],
-                            ),
-                            const SizedBox(height: 32),
-                            Container(
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.lightBlue.shade200)),
-                              child: TextField(
-                                controller: _usernameCtrl,
-                                decoration: const InputDecoration(hintText: 'Tên đăng nhập', hintStyle: TextStyle(color: Colors.black54, fontSize: 14), prefixIcon: Icon(Icons.person_outline, size: 18, color: Colors.black54), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 14)),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Container(
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.lightBlue.shade200)),
-                              child: TextField(
-                                controller: _passwordCtrl,
-                                obscureText: _obscure,
-                                decoration: InputDecoration(
-                                  hintText: 'Mật khẩu', hintStyle: const TextStyle(color: Colors.black54, fontSize: 14),
-                                  prefixIcon: const Icon(Icons.lock_outline, size: 18, color: Colors.black54),
-                                  suffixIcon: IconButton(icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, size: 18, color: Colors.black54), onPressed: () => setState(() => _obscure = !_obscure)),
-                                  border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                                ),
-                              ),
-                            ),
-                            if (_error != null) ...[
-                              const SizedBox(height: 12),
-                              Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
-                            ],
-                            const SizedBox(height: 32),
-                            SizedBox(
-                              width: double.infinity, height: 48,
-                              child: ElevatedButton(
-                                onPressed: _loading ? null : _onLogin,
-                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1CB02A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), elevation: 0),
-                                child: _loading
-                                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Text('Đăng nhập', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('Bạn mới biết đến DNGo? ', style: TextStyle(color: Colors.black87, fontSize: 12)),
-                                GestureDetector(onTap: () {}, child: const Text('Đăng ký', style: TextStyle(color: Color(0xFF2F8000), fontWeight: FontWeight.bold, fontSize: 12))),
-                              ],
-                            ),
-                          ],
-                        ),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _onLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1CB02A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Đăng Nhập',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Dành cho Đối tác Giao hàng DNGO',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.black45,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ),
-          )
-        ],
+          ),
+        ),
       ),
     );
   }

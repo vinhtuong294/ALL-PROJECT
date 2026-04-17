@@ -45,11 +45,12 @@ async def lifespan(app: FastAPI):
 
     # ── Tạo bảng mới nếu chưa có ──────────────────────
     from app.database import engine, Base
-    from app.models.models import DeliveryProof, FailedDeliveryReport, WithdrawalRequest
+    from app.models.models import DeliveryProof, FailedDeliveryReport, WithdrawalRequest, LoginHistory
     Base.metadata.create_all(bind=engine, tables=[
         DeliveryProof.__table__,
         FailedDeliveryReport.__table__,
         WithdrawalRequest.__table__,
+        LoginHistory.__table__,
     ], checkfirst=True)
     logger.info("✅ Đã kiểm tra/tạo bảng delivery_proof, failed_delivery_report và withdrawal_request")
 
