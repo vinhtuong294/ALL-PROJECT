@@ -60,7 +60,8 @@ class CartRepository:
         cart = Cart(
             cart_id=str(uuid.uuid4())[:8],
             buyer_id=buyer_id,
-            cart_date=datetime.utcnow()
+            cart_date=datetime.utcnow(),
+            update_cart_date=datetime.utcnow()  # thêm dòng này
         )
         db.add(cart)
         db.commit()
@@ -228,6 +229,7 @@ class CartRepository:
             db.add(new_detail)
 
 
+        cart.update_cart_date = datetime.utcnow()
         db.commit()
 
 
@@ -546,7 +548,6 @@ class CartRepository:
                         )
                     except Exception as e:
                         print(f"Warning: Failed to create notification: {e}")
-                        db.rollback()
         
         
         # =========================

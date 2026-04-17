@@ -30,7 +30,6 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _stallCtrl = TextEditingController();
   final _taxCtrl = TextEditingController(text: '500000');
   final _notesCtrl = TextEditingController();
   final _gridColCtrl = TextEditingController(text: '0');
@@ -53,7 +52,6 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
     _nameCtrl.dispose();
     _addressCtrl.dispose();
     _phoneCtrl.dispose();
-    _stallCtrl.dispose();
     _taxCtrl.dispose();
     _notesCtrl.dispose();
     _gridColCtrl.dispose();
@@ -64,7 +62,11 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
   void _showSuccessDialog(BuildContext ctx, AddMerchantSuccess state) {
     final loginName = state.loginName ?? '(không xác định)';
     final password = state.defaultPassword ?? '123456';
-    final copyText = 'Tên đăng nhập: $loginName\nMật khẩu: $password';
+    final stallId = state.stallId ?? '(tự sinh)';
+    final stallName = state.stallName ?? '';
+    final loaiHang = state.loaiHangHoa ?? '';
+    final copyText = 'Tên đăng nhập: $loginName\nMật khẩu: $password\nMã sạp: $stallId';
+
     showDialog(
       context: ctx,
       barrierDismissible: false,
@@ -74,6 +76,7 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // ─── Header xanh lá ────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 20),
@@ -98,10 +101,11 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Hãy cung cấp thông tin này cho tiểu thương:',
+                    'Cung cấp thông tin sau cho tiểu thương:',
                     style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 12),
+                  // ─── Thông tin đăng nhập ───────────────────────
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
@@ -113,9 +117,34 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _credRow(Icons.account_circle_outlined, 'Tên đăng nhập', loginName),
+                        _credRow(Icons.phone_outlined, 'Tên đăng nhập (SĐT)', loginName),
                         const SizedBox(height: 10),
                         _credRow(Icons.lock_outline, 'Mật khẩu mặc định', password),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // ─── Thông tin gian hàng ───────────────────────
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F8FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _credRow(Icons.storefront_outlined, 'Mã gian hàng (tự sinh)', stallId),
+                        if (stallName.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          _credRow(Icons.label_outline, 'Tên gian hàng', stallName),
+                        ],
+                        if (loaiHang.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          _credRow(Icons.category_outlined, 'Loại hàng', loaiHang),
+                        ],
                       ],
                     ),
                   ),
@@ -240,6 +269,27 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
                           keyboardType: TextInputType.phone,
                           validator: (v) => (v == null || v.isEmpty) ? 'Vui lòng nhập SĐT' : null,
                         ),
+                        const SizedBox(height: 6),
+                        // Gợi ý: SĐT sẽ là tên đăng nhập
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.07),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 14, color: AppColors.primary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'SĐT này sẽ là tên đăng nhập của tiểu thương',
+                                  style: TextStyle(fontSize: 12, color: AppColors.primary.withOpacity(0.85)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 14),
                         _buildLabel('Địa chỉ *'),
                         _buildTextField(
@@ -256,14 +306,6 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
                       title: 'Thông tin gian hàng',
                       icon: Icons.storefront_outlined,
                       children: [
-                        _buildLabel('Số/Mã gian hàng *'),
-                        _buildTextField(
-                          controller: _stallCtrl,
-                          hintText: 'Ví dụ: A-01',
-                          icon: Icons.storefront_outlined,
-                          validator: (v) => (v == null || v.isEmpty) ? 'Vui lòng nhập mã sạp' : null,
-                        ),
-                        const SizedBox(height: 14),
                         _buildLabel('Loại hàng hóa *'),
                         _isLoadingCategories ? const LinearProgressIndicator() : _buildDropdown(),
                         const SizedBox(height: 14),
@@ -377,10 +419,9 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
                               tenNguoiDung: _nameCtrl.text.trim(),
                               diaChi: _addressCtrl.text.trim(),
                               soDienThoai: _phoneCtrl.text.trim(),
-                              maGianHang: _stallCtrl.text.trim(),
                               loaiHangHoa: _selectedGoodsType!,
                               tienThueMacDinh: double.tryParse(_taxCtrl.text.replaceAll('.', '').replaceAll(',', '')) ?? 0,
-                              ghiChu: _notesCtrl.text.trim(),
+                              ghiChu: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
                               gridCol: int.tryParse(_gridColCtrl.text) ?? 0,
                               gridRow: int.tryParse(_gridRowCtrl.text) ?? 0,
                             ));

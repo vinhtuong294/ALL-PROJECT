@@ -10,6 +10,7 @@ import 'package:market_app/presentation/widgets/common/market_bottom_nav_bar.dar
 import 'package:market_app/injection_container.dart';
 import 'add_vendor_screen.dart';
 import 'tax_receipt_screen.dart';
+import 'account_history_screen.dart';
 
 class VendorListScreen extends StatefulWidget {
   final MarketNavItem currentNav;
@@ -79,6 +80,18 @@ class _VendorListScreenState extends State<VendorListScreen> {
               fontSize: 18,
             ),
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.history_edu, color: Colors.white),
+              tooltip: 'Lịch sử tạo tài khoản',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AccountHistoryScreen()),
+                );
+              },
+            ),
+          ],
         ),
         body: _buildMainContent(context),
         bottomNavigationBar: Column(
@@ -349,6 +362,14 @@ class _VendorListScreenState extends State<VendorListScreen> {
                 label: 'Tên gian hàng', value: v.stallName ?? 'Chưa có'),
             _DetailRow(icon: Icons.location_on_outlined,
                 label: 'Vị trí', value: v.stallLocation ?? 'Chưa có'),
+            if (v.sdt != null)
+              _DetailRow(icon: Icons.phone_android,
+                  label: 'Tài khoản (SĐT)', value: v.sdt!),
+            _DetailRow(icon: Icons.password_outlined,
+                label: 'Mật khẩu', value: '123456 (Mặc định)'),
+            if (v.ngayTao != null)
+              _DetailRow(icon: Icons.calendar_today,
+                  label: 'Ngày tạo', value: v.ngayTao != null ? v.ngayTao!.split('-').reversed.join('/') : ''),
             const SizedBox(height: 20),
             Row(children: [
               Expanded(

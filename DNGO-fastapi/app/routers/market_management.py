@@ -223,8 +223,36 @@ def update_stall_status(
     db: Session = Depends(get_db),
     current_user: AuthUser = Depends(allow("quan_ly_cho"))
 ):
+    VALID_STATUSES = {"mo_cua", "dong_cua"}
+    if body.status not in VALID_STATUSES:
+        raise HTTPException(422, f"Status không hợp lệ. Chọn một trong: {sorted(VALID_STATUSES)}")
     result = mm_repo.update_stall_status(db, stall_id, body.status, body.note)
     if not result:
         raise HTTPException(404, "Không tìm thấy gian hàng")
     return result
 
+@router.get("/pending-sellers")
+def list_pending_sellers(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("quan_ly_cho"))
+):
+    return mm_repo.list_pending_sellers(db, page, limit, search)
+
+
+@router.patch("/approve-seller/{user_id}")
+def approve_seller(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("quan_ly_cho"))
+):
+    """Duyệt tiểu thương (approval_status=1)"""
+    try:
+        result = mm_repo.approve_seller(db, user_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not result:
+        raise HTTPException(404, "Không tìm thấy tiểu thương")
+    return {"success": True, "message": "Duyệt người bán thành công"}

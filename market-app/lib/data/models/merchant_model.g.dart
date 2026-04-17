@@ -19,6 +19,7 @@ MerchantModel _$MerchantModelFromJson(Map<String, dynamic> json) =>
       approvalStatus: (json['approval_status'] as num?)?.toInt() ?? 1,
       sdt: json['sdt'] as String?,
       diaChi: json['dia_chi'] as String?,
+      ngayTao: json['ngay_tao'] as String?,
     );
 
 Map<String, dynamic> _$MerchantModelToJson(MerchantModel instance) =>
@@ -34,4 +35,5 @@ Map<String, dynamic> _$MerchantModelToJson(MerchantModel instance) =>
       'approval_status': instance.approvalStatus,
       'sdt': instance.sdt,
       'dia_chi': instance.diaChi,
+      'ngay_tao': instance.ngayTao,
     };

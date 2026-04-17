@@ -60,3 +60,77 @@ def map_name(ingredient_id, stall_id):
     if ingredient_id == "NLDQ01" and stall_id == "GH0000":
         return "Phí ship"
     return None
+
+
+# ========================
+# 5. Tối ưu thứ tự giao hàng (TSP - Nearest Neighbor)
+# ========================
+def optimize_delivery_route(market_address: str, delivery_addresses: list) -> dict:
+    """
+    Tối ưu thứ tự giao hàng cho shipper gom đơn.
+    
+    Input:
+    - market_address: địa chỉ chợ (điểm xuất phát)
+    - delivery_addresses: list dict {"order_id": ..., "address": ...}
+    
+    Output:
+    - optimized_route: thứ tự giao hàng tối ưu
+    - total_distance_km: tổng quãng đường
+    """
+    
+    if not delivery_addresses:
+        return {"optimized_route": [], "total_distance_km": 0}
+
+    # Geocode tất cả địa chỉ
+    try:
+        start_lat, start_lng = geocode(market_address)
+    except ValueError:
+        raise ValueError(f"Không tìm thấy tọa độ chợ: {market_address}")
+
+    points = []
+    for item in delivery_addresses:
+        try:
+            lat, lng = geocode(item["address"])
+            points.append({
+                "order_id": item["order_id"],
+                "address": item["address"],
+                "lat": lat,
+                "lng": lng
+            })
+        except ValueError:
+            continue
+
+    if not points:
+        return {"optimized_route": [], "total_distance_km": 0}
+
+    # Nearest Neighbor Algorithm
+    current_lat, current_lng = start_lat, start_lng
+    remaining = points.copy()
+    route = []
+    total_distance = 0
+
+    while remaining:
+        # Tìm điểm gần nhất
+        nearest = None
+        nearest_dist = float("inf")
+
+        for point in remaining:
+            dist = get_distance_km(current_lat, current_lng, point["lat"], point["lng"])
+            if dist < nearest_dist:
+                nearest_dist = dist
+                nearest = point
+
+        route.append({
+            "order_id": nearest["order_id"],
+            "address": nearest["address"],
+            "distance_from_prev_km": round(nearest_dist, 2)
+        })
+
+        total_distance += nearest_dist
+        current_lat, current_lng = nearest["lat"], nearest["lng"]
+        remaining.remove(nearest)
+
+    return {
+        "optimized_route": route,
+        "total_distance_km": round(total_distance, 2)
+    }

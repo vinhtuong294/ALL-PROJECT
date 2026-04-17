@@ -30,52 +30,44 @@ def list_available_orders(db: Session, page: int = 1, limit: int = 10,
     skip = (page - 1) * limit
 
     if order_status:
-        query = db.query(Order).filter(Order.order_status == order_status)
+        query = db.query(Order).filter(
+            Order.order_status == order_status,
+            Order.consolidation_id == None
+        )
     else:
         query = db.query(Order).filter(
-            Order.order_status.in_(["da_xac_nhan", "dang_giao"])
+            Order.order_status.in_(["da_xac_nhan", "dang_giao"]),
+            Order.consolidation_id == None
         )
-
+    
+    from sqlalchemy.orm import selectinload
+    query = query.options(
+        selectinload(Order.buyer).selectinload(Buyer.user),
+        selectinload(Order.payment)
+    )
     query = query.order_by(Order.distance_km.asc().nullslast())
     total = query.count()
     orders = query.offset(skip).limit(limit).all()
 
+    time_slot_ids = {o.time_slot_id for o in orders if o.time_slot_id}
+    time_slots = {ts.time_slot_id: ts for ts in db.query(TimeSlot).filter(TimeSlot.time_slot_id.in_(time_slot_ids)).all()} if time_slot_ids else {}
+
+    order_ids = [o.order_id for o in orders]
+    market_map = {}
+    if order_ids:
+        rows = db.query(OrderDetail.order_id, Market.market_name)\
+            .join(StallModel, StallModel.stall_id == OrderDetail.stall_id)\
+            .join(Market, Market.market_id == StallModel.market_id)\
+            .filter(OrderDetail.order_id.in_(order_ids))\
+            .all()
+        for r_order_id, r_market_name in rows:
+            if r_order_id not in market_map:
+                market_map[r_order_id] = r_market_name
+
     items = []
-    for order in orders:  # ← for loop trước
-        
-        # ── Lấy market_name theo từng order ──────────
-        market_name = None
-        first_detail = db.query(OrderDetail).filter(
-            OrderDetail.order_id == order.order_id  # ← dùng order trong loop
-        ).first()
-        if first_detail:
-            stall = db.query(StallModel).filter(
-                StallModel.stall_id == first_detail.stall_id
-            ).first()
-            if stall:
-                market = db.query(Market).filter(
-                    Market.market_id == stall.market_id
-                ).first()
-                if market:
-                    market_name = market.market_name
-
-        consolidation = db.query(Consolidation).filter(
-            Consolidation.consolidation_id == order.consolidation_id
-        ).first() if order.consolidation_id else None
-
-        shipper_info = None
-        if consolidation:
-            shipper = consolidation.shipper
-            shipper_info = {
-                "ma_gom_don": consolidation.consolidation_id,
-                "ma_shipper": shipper.shipper_id if shipper else None,
-                "ten_shipper": shipper.user.user_name if shipper and shipper.user else None,
-                "sdt_shipper": shipper.user.phone if shipper and shipper.user else None,
-            }
-
-        time_slot = db.query(TimeSlot).filter(
-            TimeSlot.time_slot_id == order.time_slot_id
-        ).first() if order.time_slot_id else None
+    for order in orders:
+        time_slot = time_slots.get(order.time_slot_id)
+        market_name = market_map.get(order.order_id)
 
         items.append({
             "ma_don_hang": order.order_id,
@@ -100,7 +92,7 @@ def list_available_orders(db: Session, page: int = 1, limit: int = 10,
                 "hinh_thuc_thanh_toan": order.payment.payment_method,
                 "tinh_trang_thanh_toan": order.payment.payment_status,
             } if order.payment else None,
-            "shipper_info": shipper_info,
+            "shipper_info": None,
         })
 
     return {
@@ -116,33 +108,30 @@ def list_my_orders(db: Session, shipper_id: str, page: int = 1, limit: int = 10,
                    order_status: Optional[str] = None) -> Dict[str, Any]:
     skip = (page - 1) * limit
 
-
     query = db.query(Order).filter(
         Order.consolidation_id == Consolidation.consolidation_id,
         Consolidation.shipper_id == shipper_id
     )
 
-
     if order_status:
         query = query.filter(Order.order_status == order_status)
 
+    from sqlalchemy.orm import selectinload
+    query = query.options(
+        selectinload(Order.buyer).selectinload(Buyer.user),
+        selectinload(Order.payment)
+    )
 
     query = query.order_by(Order.delivery_time.asc())
     total = query.count()
     orders = query.offset(skip).limit(limit).all()
 
+    time_slot_ids = {o.time_slot_id for o in orders if o.time_slot_id}
+    time_slots = {ts.time_slot_id: ts for ts in db.query(TimeSlot).filter(TimeSlot.time_slot_id.in_(time_slot_ids)).all()} if time_slot_ids else {}
 
     items = []
     for order in orders:
-        consolidation = db.query(Consolidation).filter(
-            Consolidation.consolidation_id == order.consolidation_id
-        ).first() if order.consolidation_id else None
-
-
-        time_slot = db.query(TimeSlot).filter(
-            TimeSlot.time_slot_id == order.time_slot_id
-        ).first() if order.time_slot_id else None
-
+        time_slot = time_slots.get(order.time_slot_id)
 
         items.append({
             "ma_don_hang": order.order_id,
@@ -166,10 +155,9 @@ def list_my_orders(db: Session, shipper_id: str, page: int = 1, limit: int = 10,
                 "tinh_trang_thanh_toan": order.payment.payment_status,
             } if order.payment else None,
             "gom_don": {
-                "ma_gom_don": consolidation.consolidation_id,
-            } if consolidation else None,
+                "ma_gom_don": order.consolidation_id,
+            } if order.consolidation_id else None,
         })
-
 
     return {
         "items": items,
@@ -183,50 +171,90 @@ def list_my_orders(db: Session, shipper_id: str, page: int = 1, limit: int = 10,
 
 
 def accept_order(db: Session, shipper_id: str, order_id: str) -> Dict[str, Any]:
-    order = db.query(Order).filter(Order.order_id == order_id).first()
+    from app.models.models import Stall, Market
 
+    order = db.query(Order).filter(Order.order_id == order_id).first()
 
     if not order:
         raise LookupError("ORDER_NOT_FOUND")
 
-
     if order.order_status != "da_xac_nhan":
-        import logging
-        logging.error(f"DEBUG: Shipper accept_order found order_status='{order.order_status}' for order_id='{order_id}'")
         raise ValueError("Chỉ có thể nhận đơn hàng đã xác nhận")
 
-
-    # Kiểm tra đã có consolidation chưa
+    # Nếu đơn đã có consolidation
     if order.consolidation_id:
         consolidation = db.query(Consolidation).filter(
             Consolidation.consolidation_id == order.consolidation_id
         ).first()
+
         if consolidation and consolidation.shipper_id != shipper_id:
             raise PermissionError("Đơn hàng đã được shipper khác nhận")
-        return {"gom_don": {"ma_gom_don": consolidation.consolidation_id}, "is_new": False}
 
+        return {
+            "gom_don": {"ma_gom_don": consolidation.consolidation_id},
+            "is_new": False
+        }
 
-    # Tạo consolidation mới
-    consolidation = Consolidation(
-        consolidation_id=gen_consolidation_id(),
-        shipper_id=shipper_id
+    # ─────────────────────────────
+    # 🔍 LẤY market_id từ order
+    # ─────────────────────────────
+    first_detail = db.query(OrderDetail).filter(
+        OrderDetail.order_id == order.order_id
+    ).first()
+
+    if not first_detail:
+        raise ValueError("Đơn hàng không có chi tiết")
+
+    stall = db.query(Stall).filter(
+        Stall.stall_id == first_detail.stall_id
+    ).first()
+
+    if not stall:
+        raise ValueError("Không tìm thấy gian hàng")
+
+    market_id = stall.market_id
+    time_slot_id = order.time_slot_id
+
+    # ─────────────────────────────
+    # 🔍 TÌM consolidation phù hợp
+    # ─────────────────────────────
+    existing = (
+        db.query(Consolidation)
+        .join(Order, Order.consolidation_id == Consolidation.consolidation_id)
+        .join(OrderDetail, OrderDetail.order_id == Order.order_id)
+        .join(Stall, Stall.stall_id == OrderDetail.stall_id)
+        .filter(
+            Consolidation.shipper_id == shipper_id,
+            Order.time_slot_id == time_slot_id,
+            Stall.market_id == market_id
+        )
+        .first()
     )
-    db.add(consolidation)
-    db.flush()
 
+    if existing:
+        consolidation = existing
+        is_new = False
+    else:
+        consolidation = Consolidation(
+            consolidation_id=gen_consolidation_id(),
+            shipper_id=shipper_id
+        )
+        db.add(consolidation)
+        db.flush()
+        is_new = True
 
+    # ─────────────────────────────
+    # GÁN đơn vào consolidation
+    # ─────────────────────────────
     order.consolidation_id = consolidation.consolidation_id
     order.order_status = "dang_giao"
-    db.commit()
 
+    db.commit()
 
     return {
         "gom_don": {"ma_gom_don": consolidation.consolidation_id},
-        "is_new": True
+        "is_new": is_new
     }
-
-
-
 
 def update_order_status(db: Session, shipper_id: str, order_id: str,
                         new_status: str) -> Dict[str, Any]:
@@ -360,6 +388,156 @@ def get_order_details(db: Session, order_id: str):
             for od, ing, stall in details
         ]
     }
-   
 
 
+def get_dashboard_stats(db: Session, shipper_id: str) -> Dict[str, Any]:
+    from datetime import date
+    from sqlalchemy import func
+    today = date.today()
+
+    orders_today = db.query(Order).join(
+        Consolidation, Consolidation.consolidation_id == Order.consolidation_id
+    ).filter(
+        Consolidation.shipper_id == shipper_id,
+        func.date(Order.delivery_time) == today
+    ).count()
+
+    total_completed = db.query(Order).join(
+        Consolidation, Consolidation.consolidation_id == Order.consolidation_id
+    ).filter(
+        Consolidation.shipper_id == shipper_id,
+        Order.order_status.in_(["da_giao", "hoan_thanh"])
+    ).count()
+
+    total_orders = db.query(Order).join(
+        Consolidation, Consolidation.consolidation_id == Order.consolidation_id
+    ).filter(Consolidation.shipper_id == shipper_id).count()
+
+    completion_rate = round(total_completed / total_orders * 100, 1) if total_orders > 0 else 0.0
+
+    return {
+        "don_hom_nay": orders_today,
+        "tong_don_hoan_thanh": total_completed,
+        "ty_le_hoan_thanh": completion_rate,
+    }
+
+
+def get_earnings(db: Session, shipper_id: str, filter_type=None, from_date=None, to_date=None) -> Dict[str, Any]:
+    from sqlalchemy import func, cast, Date
+    from datetime import date, timedelta
+
+    today = date.today()
+    if filter_type == "hom_nay":
+        from_date = to_date = today
+    elif filter_type == "tuan_nay":
+        from_date = today - timedelta(days=today.weekday())
+        to_date = today
+    elif filter_type == "thang_nay":
+        from_date = today.replace(day=1)
+        to_date = today
+
+    SHIP_ID = "NLQD01"
+    q = db.query(
+        Order.order_id,
+        Order.order_time,
+        func.sum(OrderDetail.final_price * OrderDetail.quantity_order).label("so_tien")
+    ).join(
+        OrderDetail, OrderDetail.order_id == Order.order_id
+    ).join(
+        Consolidation, Consolidation.consolidation_id == Order.consolidation_id
+    ).filter(
+        OrderDetail.ingredient_id == SHIP_ID,
+        Consolidation.shipper_id == shipper_id,
+        Order.order_status.in_(["da_giao", "hoan_thanh"]),
+    ).group_by(Order.order_id, Order.order_time)
+
+    if from_date and to_date:
+        from sqlalchemy import cast, Date
+        q = q.filter(cast(Order.order_time, Date) >= from_date, cast(Order.order_time, Date) <= to_date)
+
+    rows = q.all()
+    tong = sum(int(r.so_tien or 0) for r in rows)
+    chi_tiet = [{"order_id": r.order_id, "so_tien": int(r.so_tien or 0), "ngay": r.order_time} for r in rows]
+
+    return {"tong_thu_nhap": tong, "chi_tiet": chi_tiet}
+
+
+def update_shipper_profile(db: Session, user_id: str, **kwargs) -> Dict[str, Any]:
+    shipper = get_shipper_by_user_id(db, user_id)
+    if not shipper:
+        raise LookupError("Shipper profile not found")
+    user = db.query(User).filter(User.user_id == user_id).first()
+    for k, v in kwargs.items():
+        if k in ("vehicle_type", "vehicle_plate") and hasattr(shipper, k):
+            setattr(shipper, k, v)
+        elif k in ("bank_account", "bank_name", "phone", "address") and user and hasattr(user, k):
+            setattr(user, k, v)
+    db.commit()
+    return {"message": "Cập nhật thành công"}
+
+
+def submit_pod(db: Session, shipper_id: str, order_id: str, image_url: str, note: Optional[str] = None) -> Dict[str, Any]:
+    from app.models.models import DeliveryProof
+    order = db.query(Order).filter(Order.order_id == order_id).first()
+    if not order:
+        raise LookupError("ORDER_NOT_FOUND")
+    consolidation = db.query(Consolidation).filter(Consolidation.consolidation_id == order.consolidation_id).first()
+    if not consolidation or consolidation.shipper_id != shipper_id:
+        raise PermissionError("Bạn không có quyền với đơn hàng này")
+    pod = DeliveryProof(order_id=order_id, shipper_id=shipper_id, image_url=image_url, note=note)
+    db.add(pod)
+    db.commit()
+    db.refresh(pod)
+    return {"id": pod.id, "order_id": pod.order_id, "image_url": pod.image_url}
+
+
+def report_failed_delivery(db: Session, shipper_id: str, order_id: str, reason: str, note: Optional[str] = None, evidence_image_url: Optional[str] = None) -> Dict[str, Any]:
+    from app.models.models import FailedDeliveryReport
+    order = db.query(Order).filter(Order.order_id == order_id).first()
+    if not order:
+        raise LookupError("ORDER_NOT_FOUND")
+    consolidation = db.query(Consolidation).filter(Consolidation.consolidation_id == order.consolidation_id).first()
+    if not consolidation or consolidation.shipper_id != shipper_id:
+        raise PermissionError("Bạn không có quyền với đơn hàng này")
+    report = FailedDeliveryReport(order_id=order_id, shipper_id=shipper_id, reason=reason, note=note, evidence_image_url=evidence_image_url)
+    db.add(report)
+    order.order_status = "da_huy"
+    db.commit()
+    return {"id": report.id, "order_id": order_id, "reason": reason}
+
+
+def get_shipper_reviews(db: Session, shipper_id: str, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+    from app.models.models import ReviewShipper
+    skip = (page - 1) * limit
+    q = db.query(ReviewShipper).filter(ReviewShipper.shipper_id == shipper_id)
+    total = q.count()
+    rows = q.order_by(ReviewShipper.review_date.desc()).offset(skip).limit(limit).all()
+    items = [{"rating": r.rating, "comment": r.comment, "ngay": r.review_date} for r in rows]
+    return {"items": items, "total": total, "page": page, "limit": limit}
+
+
+def get_shipper_notifications(db: Session, user_id: str, page: int = 1, limit: int = 20) -> Dict[str, Any]:
+    from app.models.models import Notification
+    skip = (page - 1) * limit
+    q = db.query(Notification).filter(Notification.user_id == user_id)
+    total = q.count()
+    rows = q.order_by(Notification.created_at.desc()).offset(skip).limit(limit).all()
+    items = [{"noti_id": n.noti_id, "title": n.title, "body": n.body, "is_read": n.is_read, "created_at": n.created_at} for n in rows]
+    return {"items": items, "total": total}
+
+
+def mark_notification_read(db: Session, user_id: str, noti_id: int) -> bool:
+    from app.models.models import Notification
+    noti = db.query(Notification).filter(Notification.noti_id == noti_id, Notification.user_id == user_id).first()
+    if not noti:
+        return False
+    noti.is_read = True
+    db.commit()
+    return True
+
+
+def mark_all_notifications_read(db: Session, user_id: str) -> int:
+    from app.models.models import Notification
+    count = db.query(Notification).filter(Notification.user_id == user_id, Notification.is_read == False).update({"is_read": True})
+    db.commit()
+    return count

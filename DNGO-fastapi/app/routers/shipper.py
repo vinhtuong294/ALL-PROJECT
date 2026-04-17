@@ -166,6 +166,62 @@ def get_order_details(
     return {"success": True, "data": result}
 
 
+class OptimizeRouteBody(BaseModel):
+    consolidation_id: str
+
+@router.post("/orders/optimize-route")
+def optimize_route(
+    body: OptimizeRouteBody,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("shipper"))
+):
+    from app.models.models import Order, Stall, Market, OrderDetail, Consolidation
+    from app.utils.distance import optimize_delivery_route
+
+    # Kiểm tra mã gom đơn
+    consolidation = db.query(Consolidation).filter(
+        Consolidation.consolidation_id == body.consolidation_id
+    ).first()
+    if not consolidation:
+        raise HTTPException(404, "Không tìm thấy mã gom đơn")
+
+    # Lấy tất cả đơn hàng trong gom đơn
+    orders = db.query(Order).filter(
+        Order.consolidation_id == body.consolidation_id
+    ).all()
+
+    if not orders:
+        raise HTTPException(404, "Không có đơn hàng nào trong gom đơn này")
+
+    # Lấy địa chỉ chợ từ đơn đầu tiên
+    first_detail = db.query(OrderDetail).filter(
+        OrderDetail.order_id == orders[0].order_id
+    ).first()
+
+    stall = db.query(Stall).filter(Stall.stall_id == first_detail.stall_id).first()
+    market = db.query(Market).filter(Market.market_id == stall.market_id).first()
+    market_address = market.market_address
+
+    # Lấy địa chỉ giao hàng của từng đơn
+    delivery_addresses = [
+        {
+            "order_id": order.order_id,
+            "address": order.delivery_address
+        }
+        for order in orders
+    ]
+
+    try:
+        result = optimize_delivery_route(market_address, delivery_addresses)
+        return {
+            "success": True,
+            "consolidation_id": body.consolidation_id,
+            "ten_cho": market.market_name,
+            "so_don": len(orders),
+            "data": result
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 # ==================== NEW: DASHBOARD ====================
 
 @router.get("/dashboard")

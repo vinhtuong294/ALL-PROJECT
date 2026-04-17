@@ -84,11 +84,21 @@ class AddMerchantSuccess extends MerchantState {
   final String message;
   final String? loginName;
   final String? defaultPassword;
+  final String? stallId;
+  final String? stallName;
+  final String? loaiHangHoa;
 
-  const AddMerchantSuccess(this.message, {this.loginName, this.defaultPassword});
+  const AddMerchantSuccess(
+    this.message, {
+    this.loginName,
+    this.defaultPassword,
+    this.stallId,
+    this.stallName,
+    this.loaiHangHoa,
+  });
 
   @override
-  List<Object?> get props => [message, loginName, defaultPassword];
+  List<Object?> get props => [message, loginName, defaultPassword, stallId, stallName, loaiHangHoa];
 }
 
 class AddMerchantError extends MerchantState {

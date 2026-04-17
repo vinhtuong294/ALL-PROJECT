@@ -14,9 +14,10 @@ engine = create_engine(
     max_overflow=20,
     pool_recycle=1800,
     pool_timeout=20,
-    echo=False,
+    echo=False, 
     connect_args={
-        "timeout": 30  # pg8000 uses 'timeout' instead of 'connect_timeout'
+        "connect_timeout": 30,  # Tăng lên 30s để ổn định hơn với remote DB
+        "options": "-c statement_timeout=25000"  # Timeout query sau 25s
     }
 )
 

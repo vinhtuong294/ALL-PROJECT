@@ -26,6 +26,8 @@ class MerchantModel {
   final String? sdt;
   @JsonKey(name: 'dia_chi')
   final String? diaChi;
+  @JsonKey(name: 'ngay_tao')
+  final String? ngayTao;
 
   MerchantModel({
     required this.userId,
@@ -39,6 +41,7 @@ class MerchantModel {
     this.approvalStatus = 1,
     this.sdt,
     this.diaChi,
+    this.ngayTao,
   });
 
   factory MerchantModel.fromJson(Map<String, dynamic> json) => _$MerchantModelFromJson(json);

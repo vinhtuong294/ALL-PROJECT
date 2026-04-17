@@ -10,6 +10,10 @@ from app.models.models import (
     Buyer, Stall, Shipper, Consolidation
 )
 
+# ── Import schema trước để dùng trong các hàm ──────────
+from app.schemas.wallet import WalletDetailItem
+
+
 
 # ==================== HELPER ====================
 
@@ -238,16 +242,21 @@ class WalletRepository:
 
         chi_tiet.sort(key=lambda x: x.ngay or datetime.min, reverse=True)
 
+        gross = tien_vao - tien_ra
+        fee = int(gross * 0.07)  # 7%
+        net = gross - fee
+
         return {
-            "wallet_id":     wallet.wallet_id,
-            "owner_id":      wallet.owner_id,
-            "owner_type":    wallet.owner_type,
+            "wallet_id": wallet.wallet_id,
+            "owner_id": wallet.owner_id,
+            "owner_type": wallet.owner_type,
             "updated_wallet": wallet.updated_wallet,
             "tong_tien_vao": tien_vao,
-            "tong_tien_ra":  tien_ra,
-            "so_du":         tien_vao - tien_ra,
-            "chi_tiet":      chi_tiet,
-        }
+            "tong_tien_ra": tien_ra,
+            "phi_he_thong": fee,   # 👈 thêm
+            "so_du": net,          # 👈 số dư sau khi trừ
+            "chi_tiet": chi_tiet,
+}
 
     # ==================== SHIPPER ====================
 
@@ -327,17 +336,21 @@ class WalletRepository:
 
         chi_tiet.sort(key=lambda x: x.ngay or datetime.min, reverse=True)
 
+        gross = tien_vao - tien_ra
+        fee = int(gross * 0.10)  # 10%
+        net = gross - fee
+
         return {
-            "wallet_id":     wallet.wallet_id,
-            "owner_id":      wallet.owner_id,
-            "owner_type":    wallet.owner_type,
+            "wallet_id": wallet.wallet_id,
+            "owner_id": wallet.owner_id,
+            "owner_type": wallet.owner_type,
             "updated_wallet": wallet.updated_wallet,
             "tong_tien_vao": tien_vao,
-            "tong_tien_ra":  tien_ra,
-            "so_du":         tien_vao - tien_ra,
-            "chi_tiet":      chi_tiet,
+            "tong_tien_ra": tien_ra,
+            "phi_he_thong": fee,   # 👈 thêm
+            "so_du": net,          # 👈 số dư sau khi trừ
+            "chi_tiet": chi_tiet,
         }
-
     # ==================== BUYER ====================
 
     def _buyer_balance(self, db, wallet, filter_type, from_date, to_date):
@@ -447,8 +460,4 @@ class WalletRepository:
             "created_at": req.created_at
         }
 
-wallet_repo = WalletRepository()
-
-
-# ── Import ở cuối tránh circular ─────────────────────────
-from app.schemas.wallet import WalletDetailItem
+wallet_repo = WalletRepository()

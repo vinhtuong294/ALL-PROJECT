@@ -220,7 +220,9 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
       }
     } on UnauthorizedException {
       await _handleUnauthorized();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('Load Available Error: $e');
+      print('Stacktrace: $stackTrace');
       if (mounted) setState(() => _loadingAvail = false);
     }
   }

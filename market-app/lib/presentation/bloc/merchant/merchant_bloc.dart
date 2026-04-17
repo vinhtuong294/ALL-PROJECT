@@ -85,7 +85,6 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
           'ten_nguoi_dung': event.tenNguoiDung,
           'dia_chi': event.diaChi,
           'so_dien_thoai': event.soDienThoai,
-          'ma_gian_hang': event.maGianHang,
           'loai_hang_hoa': event.loaiHangHoa,
           'tien_thue_mac_dinh': event.tienThueMacDinh,
           'ghi_chu': event.ghiChu,
@@ -94,14 +93,14 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
         };
         final response = await repository.createMerchant(data);
         if (response.success) {
-          // Parse credentials from response data
-          final resData = response.data as Map<String, dynamic>?;
-          final loginName = resData?['login_name'] as String?;
-          final defaultPassword = resData?['default_password'] as String?;
+          final resData = response.data;
           emit(AddMerchantSuccess(
             response.message ?? 'Thêm tiểu thương thành công',
-            loginName: loginName,
-            defaultPassword: defaultPassword,
+            loginName: resData?.loginName,
+            defaultPassword: resData?.defaultPassword,
+            stallId: resData?.stallId,
+            stallName: resData?.stallName,
+            loaiHangHoa: resData?.loaiHangHoa,
           ));
         } else {
           emit(AddMerchantError(

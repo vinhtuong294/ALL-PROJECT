@@ -52,7 +52,6 @@ class AddMerchantEvent extends MerchantEvent {
   final String tenNguoiDung;
   final String diaChi;
   final String soDienThoai;
-  final String maGianHang;
   final String loaiHangHoa;
   final double tienThueMacDinh;
   final String? ghiChu;
@@ -63,7 +62,6 @@ class AddMerchantEvent extends MerchantEvent {
     required this.tenNguoiDung,
     required this.diaChi,
     required this.soDienThoai,
-    required this.maGianHang,
     required this.loaiHangHoa,
     required this.tienThueMacDinh,
     this.ghiChu,
@@ -76,7 +74,6 @@ class AddMerchantEvent extends MerchantEvent {
         tenNguoiDung,
         diaChi,
         soDienThoai,
-        maGianHang,
         loaiHangHoa,
         tienThueMacDinh,
         ghiChu,

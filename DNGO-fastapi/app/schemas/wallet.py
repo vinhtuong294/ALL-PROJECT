@@ -32,6 +32,7 @@ class WalletBalanceResponse(BaseModel):
     tong_tien_vao: int
     tong_tien_ra: int
     so_du: int
+    chi_tiet: list[WalletDetailItem]
     tien_dang_cho_rut: int = 0
     so_du_kha_dung: int = 0
     chi_tiet: list[WalletDetailItem]

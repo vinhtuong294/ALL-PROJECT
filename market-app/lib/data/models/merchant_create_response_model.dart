@@ -30,16 +30,33 @@ class MerchantCreateDataModel extends Equatable {
   final String userName;
   final String stallId;
   final String stallName;
+  final String? loginName;
+  final String? defaultPassword;
+  final String? soDienThoai;
+  final String? loaiHangHoa;
 
   const MerchantCreateDataModel({
     required this.userId,
     required this.userName,
     required this.stallId,
     required this.stallName,
+    this.loginName,
+    this.defaultPassword,
+    this.soDienThoai,
+    this.loaiHangHoa,
   });
 
   @override
-  List<Object?> get props => [userId, userName, stallId, stallName];
+  List<Object?> get props => [
+        userId,
+        userName,
+        stallId,
+        stallName,
+        loginName,
+        defaultPassword,
+        soDienThoai,
+        loaiHangHoa,
+      ];
 
   factory MerchantCreateDataModel.fromJson(Map<String, dynamic> json) {
     return MerchantCreateDataModel(
@@ -47,6 +64,10 @@ class MerchantCreateDataModel extends Equatable {
       userName: json['user_name'] ?? '',
       stallId: json['stall_id'] ?? '',
       stallName: json['stall_name'] ?? '',
+      loginName: json['login_name'],
+      defaultPassword: json['default_password'],
+      soDienThoai: json['so_dien_thoai'],
+      loaiHangHoa: json['loai_hang_hoa'],
     );
   }
 }

@@ -309,6 +309,7 @@ class Consolidation(Base):
    
     consolidation_id = Column(String(10), primary_key=True)
     shipper_id = Column(String(8), ForeignKey("shipper.shipper_id"), nullable=False)
+    shipping_time = Column(DateTime)
     shipping_time = Column(Integer)
    
     shipper = relationship("Shipper", back_populates="consolidations")

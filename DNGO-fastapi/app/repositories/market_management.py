@@ -80,7 +80,9 @@ def list_tieu_thuong(db: Session, manage_id: str, page: int = 1, limit: int = 10
             "vi_tri_gian_hang": stall.stall_location if stall else None,
             "tinh_trang": tinh_trang,
             "fee_status": fee.fee_status if fee else "chua_nop",
-            "fee_id": fee.fee_id if fee else None
+            "fee_id": fee.fee_id if fee else None,
+            "sdt": user.phone,
+            "ngay_tao": stall.signup_date if stall else None
         })
 
     return {
@@ -90,7 +92,7 @@ def list_tieu_thuong(db: Session, manage_id: str, page: int = 1, limit: int = 10
             "page": page,
             "limit": limit,
             "total": total,
-            "total_pages": (total + limit - 1) // limit
+            "total_pages": max(1, (total + limit - 1) // limit)
         }
     }
 
@@ -317,63 +319,71 @@ def create_tieu_thuong(db: Session, manage_id: str, merchant_in: MerchantCreate)
     from datetime import datetime
     import decimal
 
-    # 1. Lấy market_id từ manage_id
+    # 1. Lấy thông tin quản lý chợ
     mm = db.query(MarketManagement).filter(MarketManagement.manage_id == manage_id).first()
     if not mm:
         raise ValueError("Không tìm thấy thông tin quản lý chợ")
 
-    # 2. Tạo User mới (Tiểu thương)
+    # 2. Kiểm tra số điện thoại đã tồn tại chưa (tránh trùng lặp)
+    existing_phone = db.query(User).filter(
+        User.phone == merchant_in.so_dien_thoai,
+        User.role == "nguoi_ban"
+    ).first()
+    if existing_phone:
+        raise ValueError(f"Số điện thoại {merchant_in.so_dien_thoai} đã được đăng ký cho tiểu thương khác")
+
+    # 3. Validate loại hàng hóa
+    if merchant_in.loai_hang_hoa not in STALL_LOCATION_OPTIONS:
+        raise ValueError(f"Loại hàng hóa không hợp lệ. Chọn: {list(STALL_LOCATION_OPTIONS.keys())}")
+
+    # 4. Tạo user_id duy nhất
     user_id = generate_random_id("ND", length=4)
+    while db.query(User).filter(User.user_id == user_id).first():
+        user_id = generate_random_id("ND", length=4)
+
+    # Login name từ số điện thoại (dễ nhớ, dễ đăng nhập)
+    login_name = merchant_in.so_dien_thoai
     hashed_pwd = hash_password("123456")
-    login_name = f"tt_{user_id.lower()}"
+
     new_user = User(
         user_id=user_id,
         user_name=merchant_in.ten_nguoi_dung,
         phone=merchant_in.so_dien_thoai,
         address=merchant_in.dia_chi,
-        role="nguoi_ban", # standard role for merchant
+        role="nguoi_ban",
         login_name=login_name,
         password=hashed_pwd,
-        gender="O", # Other/Not specified
+        gender="O",
         active_status="mo_cua",
-        approval_status=1
+        approval_status=1  # Đã duyệt sẵn, không cần qua bước duyệt
     )
     db.add(new_user)
 
-    # 3. Tạo/Cập nhật Gian hàng
-    # Kiểm tra xem mã gian hàng đã tồn tại chưa
-    stall = db.query(Stall).filter(
-        Stall.stall_id == merchant_in.ma_gian_hang,
-        Stall.market_id == mm.market_id
-    ).first()
+    # 5. Tự sinh stall_id duy nhất (GH + 6 ký tự)
+    stall_id = generate_random_id("GH", length=6)
+    while db.query(Stall).filter(Stall.stall_id == stall_id).first():
+        stall_id = generate_random_id("GH", length=6)
 
-    if stall:
-        # Nếu đã có gian hàng này, cập nhật chủ sở hữu
-        stall.user_id = user_id
-        stall.stall_name = f"Quầy của {merchant_in.ten_nguoi_dung}"
-        stall.stall_location = merchant_in.loai_hang_hoa
-        # stall.tinh_trang = "mo_cua" # Stall model doesn't have tinh_trang? Check models.py
-    else:
-        # Tạo mới
-        stall = Stall(
-            stall_id=merchant_in.ma_gian_hang,
-            stall_name=f"Quầy của {merchant_in.ten_nguoi_dung}",
-            user_id=user_id,
-            market_id=mm.market_id,
-            manage_id=manage_id,
-            stall_location=merchant_in.loai_hang_hoa,
-            signup_date=datetime.now().date(),
-            grid_col=merchant_in.grid_col or 0,
-            grid_row=merchant_in.grid_row or 0,
-            grid_floor=1
-        )
-        db.add(stall)
+    ten_gian_hang = f"Quầy {STALL_LOCATION_OPTIONS[merchant_in.loai_hang_hoa]} - {merchant_in.ten_nguoi_dung}"
 
-    # 4. Tạo phí gian hàng (Tax) cho tháng hiện tại
+    new_stall = Stall(
+        stall_id=stall_id,
+        stall_name=ten_gian_hang,
+        user_id=user_id,
+        market_id=mm.market_id,
+        manage_id=manage_id,
+        stall_location=merchant_in.loai_hang_hoa,
+        signup_date=datetime.now().date(),
+        grid_col=merchant_in.grid_col or 0,
+        grid_row=merchant_in.grid_row or 0,
+        grid_floor=1,
+        stall_fee=merchant_in.tien_thue_mac_dinh
+    )
+    db.add(new_stall)
+
+    # 6. Tạo Payment placeholder cho StallFee (do DB constraint NOT NULL)
     current_month_date = datetime.now().date().replace(day=1)
-    
-    # Do stall_fee.payment_id có constraint và NOT NULL, ta cần tạo Payment record trước
-    payment_id = generate_random_id("PM", length=8) # Tổng 10 ký tự
+    payment_id = generate_random_id("PM", length=8)
     new_payment = Payment(
         payment_id=payment_id,
         payment_method="tien_mat",
@@ -382,12 +392,13 @@ def create_tieu_thuong(db: Session, manage_id: str, merchant_in: MerchantCreate)
         payment_status="chua_thanh_toan"
     )
     db.add(new_payment)
-    db.flush()
+    db.flush()  # Flush để payment_id tồn tại trước khi tạo StallFee
 
-    fee_id = generate_random_id("FE", length=8) # Tổng 10 ký tự
+    # 7. Tạo StallFee tháng hiện tại
+    fee_id = generate_random_id("FE", length=8)
     new_fee = StallFee(
         fee_id=fee_id,
-        stall_id=stall.stall_id,
+        stall_id=stall_id,
         fee=decimal.Decimal(str(merchant_in.tien_thue_mac_dinh)),
         fee_status="chua_nop",
         month=current_month_date,
@@ -397,19 +408,25 @@ def create_tieu_thuong(db: Session, manage_id: str, merchant_in: MerchantCreate)
 
     db.commit()
     db.refresh(new_user)
-    
+
     return {
         "success": True,
-        "message": f"Tạo thành công. Tài khoản: {login_name} - Mật khẩu: 123456",
+        "message": f"Tạo tiểu thương thành công",
         "data": {
             "user_id": new_user.user_id,
             "user_name": new_user.user_name,
             "login_name": login_name,
             "default_password": "123456",
-            "stall_id": stall.stall_id,
-            "stall_name": stall.stall_name
+            "so_dien_thoai": new_user.phone,
+            "stall_id": stall_id,
+            "stall_name": ten_gian_hang,
+            "loai_hang_hoa": STALL_LOCATION_OPTIONS[merchant_in.loai_hang_hoa],
+            "tien_thue_thang": float(merchant_in.tien_thue_mac_dinh),
+            "thi_truong": mm.market_id,
+            "ghi_chu": merchant_in.ghi_chu or ""
         }
     }
+
 
 
 def list_stall_fees(
@@ -725,4 +742,62 @@ def get_map_stalls(db: Session, manage_id: Optional[str] = None):
             "sdt": user.phone
         })
         
-    return result
+    return result
+
+def list_pending_sellers(db: Session, page: int = 1, limit: int = 10, search: Optional[str] = None):
+    offset = (page - 1) * limit
+
+    query = db.query(User).filter(
+        User.role == "nguoi_ban",
+        User.approval_status == 0
+    )
+
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            (User.user_name.ilike(search_filter)) |
+            (User.phone.ilike(search_filter))
+        )
+
+    total = query.count()
+    rows = query.offset(offset).limit(limit).all()
+
+    data = [
+        {
+            "user_id": u.user_id,
+            "user_name": u.user_name,
+            "phone": u.phone,
+            "address": u.address,
+            "approval_status": u.approval_status
+        }
+        for u in rows
+    ]
+
+    return {
+        "success": True,
+        "data": data,
+        "meta": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": max(1, (total + limit - 1) // limit)
+        }
+    }
+
+
+def approve_seller(db: Session, user_id: str):
+    user = db.query(User).filter(
+        User.user_id == user_id,
+        User.role == "nguoi_ban"
+    ).first()
+
+    if not user:
+        raise ValueError("Không tìm thấy người bán")
+
+    if user.approval_status == 1:
+        raise ValueError("Người dùng đã được duyệt rồi")
+
+    user.approval_status = 1
+    db.commit()
+
+    return {"success": True, "message": "Duyệt người bán thành công"}
