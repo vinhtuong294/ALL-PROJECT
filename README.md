@@ -19,6 +19,20 @@ Hệ thống đi chợ trực tuyến gồm các ứng dụng và dịch vụ:
 
 ## 📅 Update Log
 
+### [2026-04-17] — Lịch sử tài khoản Tiểu Thương & Fix Git Push
+
+#### 🔧 Thiết lập & Bảo mật (Git)
+- Sửa lỗi Github từ chối Push: Đã xóa khỏi bộ nhớ Git và thêm file `.gitignore` để bảo mật `.env` cũng như `serviceAccountKey.json`.
+- Điều phối cập nhật Submodule `online_market_app` với kho lưu trữ chính.
+
+#### 🗺️ market-app (Market Manager App)
+- **Hệ thống Lịch sử**: Thiết kế màn hình `AccountHistoryScreen` riêng biệt chuyên hiển thị lịch sử các tài khoản tiểu thương được cấp.
+- Cập nhật luồng trả về gồm: Tên, Gian hàng, SĐT Đăng nhập, Ngày tạo (`DD/MM/YYYY`) và làm nổi bật **Mật khẩu (123456)** để Ban Quản Lý kiểm tra thuận tiện nhất.
+- Bổ sung nút "Lịch sử" trên AppBar tại màn hình Quản lý Tiểu Thương nhằm tối ưu trải nghiệm giao diện người dùng.
+
+#### 🔧 DNGO-fastapi (Backend)
+- Cập nhật luồng Repository `list_tieu_thuong` (trực tiếp JOIN User và Stall) để trả ra payload chứa trường `sdt` và `ngay_tao` tối ưu, không làm nặng Database.
+
 ### [2026-04-16] — Market Map, Shipper App Fixes
 
 #### 🔧 DNGO-fastapi (Backend)
