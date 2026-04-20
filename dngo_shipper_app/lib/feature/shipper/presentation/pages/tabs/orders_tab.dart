@@ -3,8 +3,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter/material.dart';
 import '../../../../../core/services/api_service.dart';
+import '../../../../../core/services/auth_storage.dart';
 import '../../../../../core/utils/helpers.dart';
 import '../order_detail_page.dart';
+import '../../../../auth/presentation/pages/login_screen.dart';
 
 class OrdersTab extends StatefulWidget {
   const OrdersTab({super.key});
@@ -13,7 +15,7 @@ class OrdersTab extends StatefulWidget {
   State<OrdersTab> createState() => _OrdersTabState();
 }
 
-class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMixin {
+class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
   List<dynamic> _available = [];
   List<dynamic> _myOrders = [];
   bool _loadingAvail = true;
@@ -21,6 +23,14 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
   int _totalAvail = 0;
   int _totalMy = 0;
   Set<String> _acceptingIds = {};
+
+  // ─── Auto-polling ────────────────────────────────────────────
+  Timer? _pollingTimer;
+  Set<String> _knownOrderIds = {};
+  bool _hasNewOrders = false;
+  int _newOrderCount = 0;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
 
   late TabController _tabController;
 
@@ -34,7 +44,17 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadAvailable();
+
+    // Pulse animation cho badge
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _loadAvailable(isInitial: true);
     _loadMyOrders();
     _startPolling();
   }
@@ -189,6 +209,8 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
         _totalMy = data['total'] ?? 0;
         _loadingMy = false;
       });
+    } on UnauthorizedException {
+      await _handleUnauthorized();
     } catch (e) {
       if (mounted) setState(() => _loadingMy = false);
     }
@@ -397,7 +419,10 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 20, left: 20, right: 20, bottom: 20),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 20,
+        left: 20, right: 20, bottom: 20,
+      ),
       color: const Color(0xFF2F8000),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
