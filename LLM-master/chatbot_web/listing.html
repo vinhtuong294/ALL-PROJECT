@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Danh sách Món Ăn & Gian Hàng</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="listing-container">
+  <!-- Header -->
+  <div class="listing-header">
+    <div class="listing-header-content">
+      <a href="index.html" class="listing-back">&larr; Quay lại</a>
+      <h1>Danh sách Món Ăn & Gian Hàng</h1>
+      <p class="listing-subtitle" id="resultCount">Đang tải...</p>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="listing-tabs">
+    <button class="listing-tab active" data-tab="dishes" onclick="switchListingTab('dishes')">
+      📋 Món ăn
+    </button>
+    <button class="listing-tab" data-tab="shops" onclick="switchListingTab('shops')">
+      🏪 Gian hàng
+    </button>
+  </div>
+
+  <!-- Filters Panel -->
+  <div class="filters-panel" id="filtersPanel"></div>
+
+  <!-- Main Content with Scrollable Results -->
+  <div class="listing-main">
+    <div class="results-wrapper">
+      <div class="results-grid" id="resultsGrid"></div>
+
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="empty-icon">📋</div>
+        <h2>Không tìm thấy kết quả</h2>
+        <p>Hãy thử thay đổi các bộ lọc hoặc quay lại trang chính.</p>
+        <div class="empty-actions">
+          <button onclick="clearAllFilters()" class="btn-empty">Xóa bộ lọc</button>
+          <a href="index.html" class="btn-empty">Quay lại</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination-controls" id="paginationControls"></div>
+</div>
+
+<!-- Detail Modal -->
+<div class="listing-modal" id="detailModal" style="display:none;">
+  <div class="listing-modal-overlay" onclick="closeDetail()"></div>
+  <div class="listing-modal-content">
+    <button class="listing-modal-close" onclick="closeDetail()">×</button>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<script src="js/listing.js"></script>
+</body>
+</html>

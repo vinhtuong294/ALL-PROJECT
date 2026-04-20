@@ -1,0 +1,76 @@
+title Buyer Use Case Flow
+direction right
+
+// Nodes and groups
+Start [shape: oval, color: lightblue, icon: user]
+
+Account Management [color: blue, icon: user] {
+  Register Account [icon: user-plus, color: blue]
+  Create Wallet [icon: credit-card, color: blue]
+  Login [icon: log-in, color: blue]
+  Update Profile [icon: edit, color: blue]
+  Logout [icon: log-out, color: blue]
+}
+
+Shopping Interaction [color: green, icon: shopping-bag] {
+  View Product List [icon: list, color: green]
+  Search Products [icon: search, color: green]
+  View Product Details [icon: eye, color: green]
+}
+
+Cart Management [color: orange, icon: shopping-cart] {
+  Add to Cart [icon: plus-circle, color: orange]
+  View and Edit Cart [icon: edit-3, color: orange]
+}
+
+Smart Features [color: purple, icon: cpu] {
+  AI Menu Suggestions [icon: message-circle, color: purple]
+  Return Dishes and Ingredients [icon: clipboard, color: purple]
+  Rate Product [icon: star, color: purple]
+}
+
+Order Process [color: red, icon: package] {
+  Place Order [icon: shopping-bag, color: red]
+  Payment Method? [shape: diamond, icon: help-circle, color: red]
+  Pay via DNGo Wallet [icon: credit-card, color: red]
+  Reserve Funds [icon: lock, color: red]
+  Pay COD [icon: dollar-sign, color: red]
+  Order Confirmed [icon: check-circle, color: red]
+}
+
+Order and Finance Management [color: teal, icon: file-text] {
+  Track Order Status [icon: truck, color: blue]
+  View Order History [icon: clock, color: blue]
+  View Wallet Balance [icon: credit-card, color: green]
+  Top Up Wallet [icon: plus-square, color: green]
+}
+
+End [shape: oval, color: lightgreen, icon: check]
+
+// Relationships
+Start > Register Account
+Register Account > Create Wallet: Auto create wallet with balance 0
+Create Wallet > Login
+Login > View Product List
+View Product List > Search Products
+Search Products > View Product Details
+View Product Details > Add to Cart: Multi vendor supported
+Add to Cart > View and Edit Cart
+View and Edit Cart > AI Menu Suggestions
+AI Menu Suggestions > Return Dishes and Ingredients
+Return Dishes and Ingredients < Add to Cart
+View and Edit Cart > Place Order
+Place Order > Payment Method?
+Payment Method? > Pay via DNGo Wallet: Wallet
+Payment Method? > Pay COD: Cash on Delivery
+Pay via DNGo Wallet > Reserve Funds: Include
+Reserve Funds > Order Confirmed
+Pay COD > Order Confirmed
+Order Confirmed > Track Order Status
+Track Order Status > View Order History
+View Order History < Rate Product
+Rate Product > View Wallet Balance
+View Wallet Balance > Top Up Wallet
+Top Up Wallet < Update Profile
+Update Profile > Logout
+Logout > End

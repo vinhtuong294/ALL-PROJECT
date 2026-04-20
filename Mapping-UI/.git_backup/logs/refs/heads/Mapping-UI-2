@@ -1,4 +1,0 @@
-0000000000000000000000000000000000000000 979883f5b484131792688438fa07f5a0b00c46eb vinhtuong294 <vinhtuong294@gmail.com> 1773984309 +0700	branch: Created from HEAD
-979883f5b484131792688438fa07f5a0b00c46eb 715be367c03c163ab207803b0c9fe0fcc079d501 vinhtuong294 <vinhtuong294@gmail.com> 1773984311 +0700	commit: Update Mapping-UI with new features and fixes
-715be367c03c163ab207803b0c9fe0fcc079d501 618c6f25b263977a583f470c132ff6be76439072 vinhtuong294 <vinhtuong294@gmail.com> 1774232381 +0700	commit: feat: implement shop status toggle with persistence, auto-logout on 401, and UI fixes
-618c6f25b263977a583f470c132ff6be76439072 33ea91763610ad1e127ada50156f4938f6733f35 vinhtuong294 <vinhtuong294@gmail.com> 1775793392 +0700	commit: Save latest changes

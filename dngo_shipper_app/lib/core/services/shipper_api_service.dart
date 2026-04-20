@@ -53,6 +53,56 @@ class ShipperApiService {
     }
   }
 
+  /// Nhận đơn và trả về thông tin consolidation (gom đơn)
+  Future<Map<String, dynamic>> acceptOrderWithConsolidation(String orderId) async {
+    try {
+      final response = await _dio.post('/api/shipper/orders/accept', data: {
+        'ma_don_hang': orderId
+      });
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      throw Exception('Failed to accept order');
+    } catch (e) {
+      throw Exception('Không thể nhận đơn: $e');
+    }
+  }
+
+  /// Tối ưu tuyến đường cho gom đơn
+  Future<Map<String, dynamic>> optimizeRoute(String consolidationId) async {
+    try {
+      final response = await _dio.post('/api/shipper/orders/optimize-route', data: {
+        'consolidation_id': consolidationId
+      });
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      throw Exception('Failed to optimize route');
+    } catch (e) {
+      throw Exception('Không thể tối ưu tuyến đường: $e');
+    }
+  }
+
+  /// Lấy danh sách đơn hàng đang giao (thuộc consolidation) 
+  Future<List<ShipperOrder>> getDeliveringOrders() async {
+    try {
+      final response = await _dio.get('/api/shipper/orders/my', queryParameters: {
+        'tinh_trang_don_hang': 'dang_giao',
+        'limit': 50,
+      });
+      if (response.statusCode == 200) {
+        final data = response.data['items'] as List?;
+        if (data != null) {
+          return data.map((e) => ShipperOrder.fromJson(e)).toList();
+        }
+        return [];
+      }
+      throw Exception('Failed to load delivering orders');
+    } catch (e) {
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>?> getProfile() async {
     try {
       final response = await _dio.get('/api/shipper/me');

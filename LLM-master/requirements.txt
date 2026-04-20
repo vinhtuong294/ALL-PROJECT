@@ -1,0 +1,14 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+ollama==0.3.3
+pandas==2.2.3
+faiss-cpu==1.13.2
+sentence-transformers==3.1.1
+python-dotenv==1.0.1
+pydantic==2.9.2
+numpy==1.26.4
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+tqdm==4.66.2
+flashtext==2.7
+requests==2.32.3

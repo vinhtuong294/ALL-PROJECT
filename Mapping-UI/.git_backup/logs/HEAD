@@ -1,9 +1,0 @@
-0000000000000000000000000000000000000000 dc8d97bfea51e79ca73bc004452abb7c980ece28 vinhtuong294 <vinhtuong294@gmail.com> 1773669339 +0700	clone: from https://github.com/vinhtuong294/Mapping-UI.git
-dc8d97bfea51e79ca73bc004452abb7c980ece28 1de1e26bb3cd015affd8e84f8f544edb6178d061 vinhtuong294 <vinhtuong294@gmail.com> 1773674430 +0700	commit: feat(auth): Add getUserId function to retrieve user ID from stored user data
-1de1e26bb3cd015affd8e84f8f544edb6178d061 979883f5b484131792688438fa07f5a0b00c46eb vinhtuong294 <vinhtuong294@gmail.com> 1773773694 +0700	commit: Fix image loading and auth payload for seller role
-979883f5b484131792688438fa07f5a0b00c46eb 979883f5b484131792688438fa07f5a0b00c46eb vinhtuong294 <vinhtuong294@gmail.com> 1773984309 +0700	checkout: moving from main to Mapping-UI-2
-979883f5b484131792688438fa07f5a0b00c46eb 715be367c03c163ab207803b0c9fe0fcc079d501 vinhtuong294 <vinhtuong294@gmail.com> 1773984311 +0700	commit: Update Mapping-UI with new features and fixes
-715be367c03c163ab207803b0c9fe0fcc079d501 618c6f25b263977a583f470c132ff6be76439072 vinhtuong294 <vinhtuong294@gmail.com> 1774232381 +0700	commit: feat: implement shop status toggle with persistence, auto-logout on 401, and UI fixes
-618c6f25b263977a583f470c132ff6be76439072 33ea91763610ad1e127ada50156f4938f6733f35 vinhtuong294 <vinhtuong294@gmail.com> 1775793392 +0700	commit: Save latest changes
-33ea91763610ad1e127ada50156f4938f6733f35 33ea91763610ad1e127ada50156f4938f6733f35 vinhtuong294 <vinhtuong294@gmail.com> 1776304658 +0700	checkout: moving from Mapping-UI-2 to demo
-33ea91763610ad1e127ada50156f4938f6733f35 afc15df8549fee4faa4d6e561aed2563c719c4be vinhtuong294 <vinhtuong294@gmail.com> 1776304658 +0700	commit: Tạo nhánh demo và cập nhật code

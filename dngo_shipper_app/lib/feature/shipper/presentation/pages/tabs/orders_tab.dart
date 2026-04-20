@@ -1,5 +1,7 @@
+import 'dart:async';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../../core/services/api_service.dart';
 import '../../../../../core/utils/helpers.dart';
 import '../order_detail_page.dart';
@@ -22,18 +24,140 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
 
   late TabController _tabController;
 
+  // --- Polling đơn hàng mới ---
+  Timer? _pollingTimer;
+  int _newOrderCount = 0;
+  Set<String> _knownOrderIds = {};
+  static const Duration _pollingInterval = Duration(seconds: 15);
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadAvailable();
     _loadMyOrders();
+    _startPolling();
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _startPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(_pollingInterval, (_) async {
+      debugPrint('🔄 [SHIPPER POLLING] Checking for new available orders...');
+      await _checkNewAvailableOrders();
+    });
+    debugPrint('✅ [SHIPPER POLLING] Started (interval: ${_pollingInterval.inSeconds}s)');
+  }
+
+  Future<void> _checkNewAvailableOrders() async {
+    try {
+      final data = await ApiService.getAvailableOrders(page: 1, limit: 50);
+      if (!mounted) return;
+      final items = (data['items'] as List<dynamic>?) ?? [];
+      final newIds = items
+          .map((o) => (o['ma_don_hang'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      if (_knownOrderIds.isEmpty) {
+        // Khoi tao - ghi nho ID hien tai, khong bao
+        _knownOrderIds = newIds;
+        return;
+      }
+
+      final brandNewIds = newIds.difference(_knownOrderIds);
+      if (brandNewIds.isNotEmpty && mounted) {
+        debugPrint('🆕 [SHIPPER POLLING] ${brandNewIds.length} new order(s) detected!');
+        _knownOrderIds = newIds;
+        setState(() {
+          _available = items;
+          _totalAvail = data['total'] ?? items.length;
+          _newOrderCount = brandNewIds.length;
+        });
+        _showNewOrderBanner(brandNewIds.length);
+      } else {
+        _knownOrderIds = newIds;
+      }
+    } catch (e) {
+      debugPrint('⚠️ [SHIPPER POLLING] Error: $e');
+    }
+  }
+
+  void _showNewOrderBanner(int count) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 6),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        content: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1B5E20), Color(0xFF2F8000)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF2F8000).withValues(alpha: 0.5),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.flash_on, color: Colors.amber, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Có $count đơn hàng mới!',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const Text(
+                      'Nhấn "Xem ngay" để tranh đơn',
+                      style: TextStyle(fontSize: 12, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  if (mounted) setState(() => _newOrderCount = 0);
+                  _tabController.animateTo(0);
+                },
+                child: const Text('Xem ngay',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadAvailable() async {
@@ -44,6 +168,12 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
         _available = data['items'] ?? [];
         _totalAvail = data['total'] ?? 0;
         _loadingAvail = false;
+        // Cập nhật danh sách ID đơn biết
+        _knownOrderIds = (_available)
+            .map((o) => (o['ma_don_hang'] ?? '').toString())
+            .where((id) => id.isNotEmpty)
+            .toSet();
+        _newOrderCount = 0;
       });
     } catch (e) {
       if (mounted) setState(() => _loadingAvail = false);
@@ -166,22 +296,32 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
                 ),
               ),
               Expanded(
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(target: marketPos, zoom: 13),
-                  markers: {
-                    Marker(
-                      markerId: const MarkerId('market'),
-                      position: marketPos,
-                      infoWindow: const InfoWindow(title: 'Chợ Bắc Mỹ An', snippet: 'Điểm lấy hàng'),
-                      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+                child: FlutterMap(
+                  options: MapOptions(initialCenter: marketPos, initialZoom: 13),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.dngo.shipper',
                     ),
-                    Marker(
-                      markerId: const MarkerId('delivery'),
-                      position: deliveryPos,
-                      infoWindow: InfoWindow(title: 'Giao đến', snippet: address),
-                      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: marketPos, width: 40, height: 40,
+                          child: Container(
+                            decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                            child: const Icon(Icons.store, color: Colors.white, size: 20),
+                          ),
+                        ),
+                        Marker(
+                          point: deliveryPos, width: 40, height: 40,
+                          child: Container(
+                            decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                            child: const Icon(Icons.location_on, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ],
                     ),
-                  },
+                  ],
                 ),
               ),
               Container(
@@ -263,13 +403,41 @@ class _OrdersTabState extends State<OrdersTab> with SingleTickerProviderStateMix
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           const Text('Đơn hàng', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-          GestureDetector(
-            onTap: () { _loadAvailable(); _loadMyOrders(); },
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.refresh, color: Colors.white, size: 22),
-            ),
+          Row(
+            children: [
+              // Badge đơn mới
+              if (_newOrderCount > 0)
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.amber,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.flash_on, color: Colors.black, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$_newOrderCount mới',
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              GestureDetector(
+                onTap: () { _loadAvailable(); _loadMyOrders(); },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.refresh, color: Colors.white, size: 22),
+                ),
+              ),
+            ],
           ),
         ],
       ),

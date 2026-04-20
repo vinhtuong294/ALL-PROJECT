@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/location_tracking_service.dart';
@@ -109,12 +110,45 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 ),
               ),
               Expanded(
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(target: marketPos, zoom: 13),
-                  markers: {
-                    Marker(markerId: const MarkerId('market'), position: marketPos, infoWindow: const InfoWindow(title: 'Chợ Bắc Mỹ An', snippet: 'Điểm lấy'), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)),
-                    Marker(markerId: const MarkerId('delivery'), position: deliveryPos, infoWindow: InfoWindow(title: 'Giao đến', snippet: address), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed)),
-                  },
+                child: FlutterMap(
+                  options: MapOptions(
+                    initialCenter: marketPos,
+                    initialZoom: 13,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.dngo.shipper',
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: marketPos,
+                          width: 40, height: 40,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.store, color: Colors.white, size: 20),
+                          ),
+                        ),
+                        Marker(
+                          point: deliveryPos,
+                          width: 40, height: 40,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(Icons.location_on, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
               Container(

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trợ Lý Ẩm Thực AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-top">
+    <div class="logo">
+      <div class="logo-mark">🍜</div>
+      <div class="logo-text">
+        Ẩm Thực AI
+        <span>Food Assistant · LLM Query v2</span>
+      </div>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="tab-switcher">
+      <button class="tab-btn active" id="tabChat" onclick="switchTab('chat')">
+        💬 Chat
+      </button>
+      <button class="tab-btn" id="tabMenu" onclick="switchTab('menu')">
+        📅 Thực đơn
+      </button>
+      <button class="tab-btn" id="tabShop" onclick="switchTab('shop')">
+        🏪 Gian hàng
+      </button>
+    </div>
+  </div>
+
+  <!-- Nav panel: Chat -->
+  <div class="nav-panel active" id="navChat">
+    <div class="sidebar-scroll">
+      <button class="nav-btn" style="margin-bottom:8px;border:1px dashed var(--border);justify-content:center;color:var(--muted)"
+              onclick="newChat()">
+        + Cuộc trò chuyện mới
+      </button>
+
+      <!-- Demo section: 3 bug fixes -->
+      <div class="nav-group">
+        <span class="nav-label" style="color:rgba(167,139,250,0.7)">🧪 Demo fixes</span>
+        <button class="nav-btn demo-btn" onclick="suggest('Tìm món chay ngon')">
+          <span class="icon">🥬</span>
+          <span>Món chay <span style="font-size:10px;color:var(--purple);display:block">Fix: exclude thịt/cá/tôm...</span></span>
+        </button>
+        <button class="nav-btn demo-btn" onclick="suggest('Cá mồi nấu gì ngon')">
+          <span class="icon">🐟</span>
+          <span>Cá mồi nấu gì <span style="font-size:10px;color:var(--purple);display:block">Fix: exact ingredient search</span></span>
+        </button>
+        <button class="nav-btn demo-btn" onclick="suggest('Gian hàng bán hải sản tươi')">
+          <span class="icon">🏪</span>
+          <span>Gian hàng hải sản <span style="font-size:10px;color:var(--purple);display:block">Fix: không nói "không tìm thấy"</span></span>
+        </button>
+        <button class="nav-btn demo-btn" onclick="suggest('Món keto cho người giảm cân')">
+          <span class="icon">🥩</span>
+          <span>Keto giảm cân <span style="font-size:10px;color:var(--purple);display:block">LLM: extract health_goal</span></span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <span class="nav-label">🍽️ Món ăn</span>
+        <button class="nav-btn" onclick="suggest('Gợi ý món từ thịt bò')">
+          <span class="icon">🥩</span>Gợi ý món thịt bò
+        </button>
+        <button class="nav-btn" onclick="suggest('Món hải sản ngon nhất')">
+          <span class="icon">🦐</span>Hải sản tươi ngon
+        </button>
+        <button class="nav-btn" onclick="suggest('Nấu nhanh dưới 20 phút')">
+          <span class="icon">⚡</span>Nấu nhanh 20 phút
+        </button>
+        <button class="nav-btn" onclick="suggest('Bún bò Huế nấu như thế nào?')">
+          <span class="icon">🍜</span>Bún bò Huế
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <span class="nav-label">💪 Sức khỏe</span>
+        <button class="nav-btn" onclick="suggest('Tôi muốn giảm cân ăn gì nhẹ?')">
+          <span class="icon">🥗</span>Giảm cân ăn nhẹ
+        </button>
+        <button class="nav-btn" onclick="suggest('Tôi muốn tăng cân gợi ý món nhiều calo')">
+          <span class="icon">💪</span>Tăng cân, nhiều calo
+        </button>
+        <button class="nav-btn" onclick="suggest('Món canh bổ dưỡng cho gia đình')">
+          <span class="icon">🍲</span>Canh bổ dưỡng gia đình
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <span class="nav-label">🏪 Gian hàng</span>
+        <button class="nav-btn" onclick="suggest('Gian hàng nào bán thịt bò tươi uy tín?')">
+          <span class="icon">🥩</span>Gian hàng thịt bò
+        </button>
+        <button class="nav-btn" onclick="suggest('Tìm gian hàng bán hải sản đánh giá cao')">
+          <span class="icon">🦑</span>Gian hàng hải sản
+        </button>
+        <button class="nav-btn" onclick="suggest('Cửa hàng nào bán rau củ giá rẻ?')">
+          <span class="icon">🥦</span>Gian hàng rau củ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav panel: Menu builder -->
+  <div class="nav-panel" id="navMenu">
+    <div class="menu-panel-sidebar">
+      <div class="menu-builder">
+        <div class="menu-builder-title">📅 Tạo thực đơn</div>
+
+        <label class="form-label">Mục tiêu sức khỏe</label>
+        <select class="form-select" id="menuGoal">
+          <option value="Cân bằng">⚖️ Dinh dưỡng cân bằng</option>
+          <option value="Giảm cân">🥗 Giảm cân</option>
+          <option value="Tăng cân">💪 Tăng cân</option>
+          <option value="Tăng cơ">🏋️ Tăng cơ</option>
+          <option value="Sức đề kháng">🛡️ Tăng sức đề kháng</option>
+        </select>
+
+        <label class="form-label">Số ngày</label>
+        <div class="days-row">
+          <button class="day-btn selected" data-days="1" onclick="selectDays(this)">1</button>
+          <button class="day-btn" data-days="2" onclick="selectDays(this)">2</button>
+          <button class="day-btn" data-days="3" onclick="selectDays(this)">3</button>
+          <button class="day-btn" data-days="5" onclick="selectDays(this)">5</button>
+          <button class="day-btn" data-days="7" onclick="selectDays(this)">7</button>
+        </div>
+
+        <label class="form-label">Số bữa / ngày</label>
+        <select class="form-select" id="menuMeals">
+          <option value="1">1 bữa</option>
+          <option value="2">2 bữa</option>
+          <option value="3" selected>3 bữa</option>
+        </select>
+
+        <label class="form-label">Lưu ý thêm (chọn nhiều)</label>
+        <div class="note-chips" id="noteChips">
+          <button class="note-chip" onclick="toggleNote(this)">🥬 Món chay</button>
+          <button class="note-chip" onclick="toggleNote(this)">🏠 Miền Bắc</button>
+          <button class="note-chip" onclick="toggleNote(this)">🌶️ Miền Trung</button>
+          <button class="note-chip" onclick="toggleNote(this)">🍚 Miền Nam</button>
+          <button class="note-chip" onclick="toggleNote(this)">👶 Trẻ em</button>
+          <button class="note-chip" onclick="toggleNote(this)">👴 Người lớn tuổi</button>
+          <button class="note-chip" onclick="toggleNote(this)">⚖️ Ăn kiêng</button>
+        </div>
+
+        <label class="form-label">🚫 Nguyên liệu dị ứng</label>
+        <input type="text" class="form-input" id="allergyInput" 
+          placeholder="VD: tôm, cá, đậu phộng, sữa... (cách nhau bằng dấu phẩy)">
+
+        <button class="gen-btn" id="genBtn" onclick="generateMenu()">
+          ✨ Tạo thực đơn
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav panel: Shop -->
+  <div class="nav-panel" id="navShop">
+    <div class="sidebar-scroll">
+      <div class="nav-group">
+        <span class="nav-label">Tìm nhanh</span>
+        <button class="nav-btn" onclick="suggest('Gian hàng nào bán thịt heo tươi giá rẻ?')">
+          <span class="icon">🐷</span>Thịt heo tươi
+        </button>
+        <button class="nav-btn" onclick="suggest('Tìm gian hàng bán tôm tươi uy tín')">
+          <span class="icon">🦐</span>Tôm tươi
+        </button>
+        <button class="nav-btn" onclick="suggest('Cửa hàng nào bán cá hồi đánh giá cao?')">
+          <span class="icon">🐟</span>Cá hồi
+        </button>
+        <button class="nav-btn" onclick="suggest('Gian hàng bán rau sạch gần đây')">
+          <span class="icon">🥦</span>Rau sạch
+        </button>
+        <button class="nav-btn" onclick="suggest('Shop bán trứng gà sạch uy tín')">
+          <span class="icon">🥚</span>Trứng gà sạch
+        </button>
+        <button class="nav-btn" onclick="suggest('Gian hàng bán đậu phụ tươi giá tốt')">
+          <span class="icon">🫘</span>Đậu phụ tươi
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div style="margin-bottom:8px;padding:0 10px;">
+      <a href="listing.html" style="display:block;padding:8px;text-align:center;font-size:13px;color:var(--accent);text-decoration:none;border:1px solid var(--border);border-radius:6px;transition:all .2s" onmouseover="this.style.background='rgba(167,139,250,.1)'" onmouseout="this.style.background='transparent'">
+        📋 Xem danh sách
+      </a>
+    </div>
+    <div class="api-status">
+      <span class="dot" id="dot"></span>
+      <span id="statusTxt">Đang kết nối...</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══════════════════════════════════════════════ -->
+<main class="main">
+
+  <!-- View: Chat -->
+  <div class="view active" id="viewChat">
+    <div class="chat-scroll" id="chatScroll">
+      <div class="msgs" id="msgs">
+        <div class="welcome" id="welcome">
+          <div class="welcome-emoji">🍳</div>
+          <h1>Trợ Lý Ẩm Thực AI</h1>
+          <p>Hỏi tôi về món ăn, công thức nấu, gian hàng nguyên liệu hay thực đơn sức khỏe!</p>
+          <div class="chips">
+            <button class="chip" onclick="suggest('Gợi ý món thịt bò')">🥩 Món thịt bò</button>
+            <button class="chip" onclick="suggest('Món hải sản tươi ngon')">🦐 Hải sản tươi</button>
+            <button class="chip" onclick="suggest('Ăn kiêng giảm cân nên ăn gì?')">🥗 Ăn kiêng</button>
+            <button class="chip" onclick="suggest('Nấu nhanh 15 phút')">⚡ Nấu nhanh</button>
+            <button class="chip" onclick="suggest('Gian hàng nào bán thịt bò tươi uy tín?')">🏪 Gian hàng</button>
+          </div>
+          <!-- Demo chips -->
+          <div style="margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:6px">
+            <span style="font-size:11px;color:var(--muted2);letter-spacing:0.5px">— Demo các tính năng mới —</span>
+            <div class="chips">
+              <button class="chip demo-chip" onclick="suggest('Tìm món chay ngon không có thịt cá')">🥬 Test món chay</button>
+              <button class="chip demo-chip" onclick="suggest('Cá mồi nấu gì ngon')">🐟 Test cá mồi</button>
+              <button class="chip demo-chip" onclick="suggest('Gian hàng bán hải sản tươi')">🏪 Test gian hàng</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-wrap">
+        <div class="input-inner">
+          <textarea id="msgInput"
+            placeholder="Hỏi về món ăn, gian hàng, công thức..."
+            rows="1"
+            onkeydown="handleKey(event)"
+            oninput="autoResize(this)"></textarea>
+        </div>
+        <button class="send" id="sendBtn" onclick="sendMessage()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View: Menu -->
+  <div class="view" id="viewMenu">
+    <div class="menu-view-inner">
+      <div class="menu-container">
+        <div class="menu-view-title">📅 Thực đơn của bạn</div>
+        <div class="menu-view-sub" id="menuSub">Chọn mục tiêu và nhấn "Tạo thực đơn" ở thanh bên</div>
+        <div id="menuResult">
+          <div class="menu-empty">
+            <div class="menu-empty-icon">📋</div>
+            <h2>Chưa có thực đơn</h2>
+            <p>Chọn mục tiêu sức khỏe, số ngày và nhấn "Tạo thực đơn" ở thanh bên trái để bắt đầu.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══ MODAL ═══════════════════════════════════════════════ -->
+<div class="overlay" id="modal" style="display:none" onclick="closeModalOutside(event)">
+  <div class="modal" id="modalBox">
+    <div class="modal-head">
+      <h2 id="modalTitle"></h2>
+      <button class="modal-x" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

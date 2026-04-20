@@ -1,0 +1,168 @@
+{
+  "_comment": "Centralized food dictionary for FlashText NLU. Data tách khỏi logic code.",
+
+  "ingredients": {
+    "_comment": "surface_form -> canonical_form. Compound trước, single sau.",
+    "thịt bò": "thịt bò",
+    "thịt heo": "thịt heo",
+    "thịt lợn": "thịt heo",
+    "thịt gà": "thịt gà",
+    "thịt vịt": "thịt vịt",
+    "thịt dê": "thịt dê",
+    "thịt cừu": "thịt cừu",
+    "cá hồi": "cá hồi",
+    "cá thu": "cá thu",
+    "cá lóc": "cá lóc",
+    "cá chép": "cá chép",
+    "cá nục": "cá nục",
+    "cá ngừ": "cá ngừ",
+    "cá mòi": "cá mòi",
+    "cá basa": "cá basa",
+    "cá diêu hồng": "cá diêu hồng",
+    "tôm sú": "tôm sú",
+    "tôm hùm": "tôm hùm",
+    "tôm tươi": "tôm tươi",
+    "bạch tuộc": "bạch tuộc",
+    "hải sản": "hải sản",
+    "đậu phộng": "đậu phộng",
+    "đậu hũ": "đậu hũ",
+    "đậu phụ": "đậu hũ",
+    "nước mắm": "nước mắm",
+    "mật ong": "mật ong",
+    "cồi điệp": "cồi điệp",
+    "thịt": "thịt",
+    "bò": "bò",
+    "heo": "heo",
+    "lợn": "heo",
+    "gà": "gà",
+    "vịt": "vịt",
+    "dê": "dê",
+    "cá": "cá",
+    "tôm": "tôm",
+    "cua": "cua",
+    "mực": "mực",
+    "nghêu": "nghêu",
+    "sò": "sò",
+    "hàu": "hàu",
+    "trứng": "trứng",
+    "sữa": "sữa",
+    "giò": "giò",
+    "chả": "chả",
+    "nấm": "nấm",
+    "rau": "rau",
+    "khoai": "khoai",
+    "bắp": "bắp",
+    "đậu": "đậu"
+  },
+
+  "dish_types": {
+    "_comment": "Loại món ăn / kiểu nấu -> canonical",
+    "canh": "canh",
+    "súp": "súp",
+    "lẩu": "lẩu",
+    "gỏi": "gỏi",
+    "salad": "gỏi",
+    "xào": "xào",
+    "chiên": "chiên",
+    "nướng": "nướng",
+    "hấp": "hấp",
+    "kho": "kho",
+    "rim": "rim",
+    "cuộn": "cuộn",
+    "bánh": "bánh",
+    "cháo": "cháo",
+    "bún": "bún",
+    "phở": "phở",
+    "mì": "mì",
+    "cơm": "cơm",
+    "pizza": "pizza",
+    "burger": "burger",
+    "sandwich": "sandwich"
+  },
+
+  "diets": {
+    "_comment": "Chế độ ăn đặc biệt -> canonical",
+    "chay": "chay",
+    "thuần chay": "thuần chay",
+    "vegetarian": "chay",
+    "vegan": "thuần chay",
+    "keto": "keto",
+    "eat clean": "eat clean",
+    "gluten free": "gluten free",
+    "ăn kiêng": "ăn kiêng",
+    "low carb": "low carb"
+  },
+
+  "negation_triggers": [
+    "không có",
+    "không ăn được",
+    "không ăn",
+    "không thích",
+    "không chứa",
+    "bị dị ứng",
+    "dị ứng với",
+    "dị ứng",
+    "ghét",
+    "bỏ",
+    "loại bỏ",
+    "trừ"
+  ],
+
+  "intents": {
+    "_comment": "Intent keywords -> intent_name. Thứ tự ưu tiên: shop > diet > ingredient > rest",
+    "search_shop": [
+      "gian hàng", "cửa hàng", "shop", "quán bán",
+      "nơi bán", "chỗ bán", "mua ở đâu", "bán ở đâu",
+      "tìm quán", "tìm cửa hàng", "gợi ý quán",
+      "đánh giá cao", "uy tín", "rating cao",
+      "gian hàng nào", "shop nào", "hàng nào bán",
+      "có bán không", "ai bán", "mua được không",
+      "tìm gian", "gợi ý gian hàng"
+    ],
+    "greeting": [
+      "xin chào", "chào bạn", "hello", "hi bạn",
+      "bạn là ai", "bạn có thể làm gì", "giới thiệu",
+      "cảm ơn", "cám ơn", "thank", "bye", "tạm biệt"
+    ],
+    "menu_planning": [
+      "thực đơn", "menu", "lên thực đơn", "gợi ý thực đơn",
+      "7 ngày", "3 ngày", "1 tuần", "cả tuần",
+      "kế hoạch ăn", "lịch ăn", "plan ăn uống"
+    ],
+    "health_advice": [
+      "tăng cân", "giảm cân", "ăn kiêng", "low calorie", "ít calo",
+      "dinh dưỡng", "protein", "bổ sung", "năng lượng cao",
+      "tiểu đường", "huyết áp", "tim mạch", "khỏe mạnh"
+    ],
+    "cooking_instruction": [
+      "cách nấu", "công thức", "làm thế nào", "nấu như thế nào",
+      "dạy tôi", "hướng dẫn", "bước thực hiện",
+      "sơ chế", "nguyên liệu cần gì", "cần những gì để nấu"
+    ],
+    "filter_quick": [
+      "nấu nhanh", "dưới 15 phút", "dưới 20 phút", "dưới 30 phút",
+      "dễ làm", "đơn giản", "người mới", "không cần kỹ năng"
+    ],
+    "special_occasion": [
+      "tiệc", "tiệc gia đình", "đãi khách", "đám giỗ",
+      "sinh nhật", "lễ tết", "giáng sinh",
+      "4 người", "6 người", "nhiều người", "đông người",
+      "lãng mạn", "hẹn hò", "bữa tối sang"
+    ],
+    "buy_action": [
+      "đặt mua", "order", "thêm vào giỏ", "mua ngay",
+      "đặt hàng", "tôi muốn mua", "cho tôi mua"
+    ],
+    "family_group": [
+      "trẻ em", "con nít", "con nhỏ", "em bé",
+      "người già", "người lớn tuổi", "ông bà",
+      "bà bầu", "mang thai", "phụ nữ có thai",
+      "cả nhà", "gia đình"
+    ],
+    "search_general": [
+      "gợi ý", "đề xuất", "cho tôi xem", "tìm món",
+      "món gì ngon", "ăn gì", "hôm nay ăn gì",
+      "muốn ăn", "thèm ăn", "không biết ăn gì"
+    ]
+  }
+}
