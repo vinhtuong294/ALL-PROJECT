@@ -3,6 +3,7 @@ import 'tabs/home_tab.dart';
 import 'tabs/orders_tab.dart';
 import 'tabs/map_tab.dart';
 import 'tabs/account_tab.dart';
+import 'market_map_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;
@@ -42,17 +43,20 @@ class MainScreenState extends State<MainScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Navigate to orders tab
-          switchToTab(1);
+          // Open Detailed Market Map
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MarketMapScreen()),
+          );
         },
         backgroundColor: Colors.white,
         elevation: 4,
         shape: const CircleBorder(),
         child: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Image.network(
-            'https://cdn-icons-png.flaticon.com/512/3753/3753061.png',
-            errorBuilder: (c, e, s) => const Icon(Icons.shopping_cart, color: Color(0xFF2F8000)),
+          child: Image.asset(
+            'assets/img/logo.png',
+            errorBuilder: (c, e, s) => const Icon(Icons.map, color: Color(0xFF4CAF50)),
           ),
         ),
       ),
@@ -80,7 +84,7 @@ class MainScreenState extends State<MainScreen> {
 
   Widget _buildNavItem(IconData icon, String label, int index) {
     final isSelected = _currentIndex == index;
-    final color = isSelected ? const Color(0xFF2F8000) : Colors.grey;
+    final color = isSelected ? const Color(0xFF4CAF50) : Colors.grey;
     return GestureDetector(
       onTap: () => switchToTab(index),
       behavior: HitTestBehavior.opaque,

@@ -72,15 +72,13 @@ class _HomeTabState extends State<HomeTab> {
           _buildHeader(context),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF2F8000)))
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF4CAF50)))
                 : RefreshIndicator(
-                    color: const Color(0xFF2F8000),
+                    color: const Color(0xFF4CAF50),
                     onRefresh: _loadData,
                     child: ListView(
                       padding: const EdgeInsets.all(20),
                       children: [
-                        _buildOnlineToggle(),
-                        const SizedBox(height: 24),
                         const Text('Thống kê thu nhập', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 16),
                         _buildStatsGrid(),
@@ -104,7 +102,7 @@ class _HomeTabState extends State<HomeTab> {
     return Container(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 20, left: 24, right: 24, bottom: 28),
       decoration: const BoxDecoration(
-        color: Color(0xFF2F8000),
+        color: Color(0xFF4CAF50),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
       child: Row(
@@ -130,7 +128,7 @@ class _HomeTabState extends State<HomeTab> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)]),
-              child: const Icon(Icons.notifications_none, color: Color(0xFF2F8000)),
+              child: const Icon(Icons.notifications_none, color: Color(0xFF4CAF50)),
             ),
           )
         ],

@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import '../../../../../core/services/shipper_api_service.dart';
+import '../market_map_screen.dart';
 
 /// =============================================================
 /// Map Tab — Bản đồ giao hàng OSM (không cần Google Maps API key)
@@ -58,7 +59,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       final orders = await _apiService.getDeliveringOrders();
 
       if (orders.isEmpty) {
-        setState(() { _isLoading = false; _error = 'no_orders'; });
+        if (mounted) setState(() { _isLoading = false; _error = 'no_orders'; });
         return;
       }
 
@@ -117,11 +118,11 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       _consolidationId = firstConsolidationId;
 
       if (points.isEmpty) {
-        setState(() { _isLoading = false; _error = 'no_geocode'; });
+        if (mounted) setState(() { _isLoading = false; _error = 'no_geocode'; });
         return;
       }
 
-      setState(() { _deliveryPoints = points; _isLoading = false; });
+      if (mounted) setState(() { _deliveryPoints = points; _isLoading = false; });
 
       // Fit map
       _fitMapToPoints();
@@ -131,7 +132,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
         await _optimizeRoute();
       }
     } catch (e) {
-      setState(() { _isLoading = false; _error = e.toString(); });
+      if (mounted) setState(() { _isLoading = false; _error = e.toString(); });
     }
   }
 
@@ -376,9 +377,38 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Bản đồ Vận hành', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
+          backgroundColor: const Color(0xFF2F8000),
+          elevation: 0,
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
+            tabs: [
+              Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.store_mall_directory, size: 18), SizedBox(width: 8), Text('Tại Chợ', style: TextStyle(fontWeight: FontWeight.bold))])),
+              Tab(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.route, size: 18), SizedBox(width: 8), Text('Giao hàng', style: TextStyle(fontWeight: FontWeight.bold))])),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            const MarketMapScreen(showAppBar: false),
+            _buildDeliveryMap(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeliveryMap(BuildContext context) {
+    return Stack(
+      children: [
           // ── Bản đồ OSM ──
           FlutterMap(
             mapController: _mapController,
@@ -494,8 +524,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
               ),
             ),
         ],
-      ),
-    );
+      );
   }
 
   /// Build marker list with numbered labels
@@ -659,8 +688,8 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       left: 0,
       right: 0,
       child: Container(
-        padding: EdgeInsets.only(
-          top: MediaQuery.of(context).padding.top + 8,
+        padding: const EdgeInsets.only(
+          top: 12,
           left: 16, right: 16, bottom: 14,
         ),
         decoration: BoxDecoration(

@@ -10,8 +10,9 @@ class UnauthorizedException implements Exception {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://207.180.233.84:8000';
-  static const String coreBaseUrl = 'http://207.180.233.84:8000';
+  static const String baseUrl = 'http://localhost:8002';
+  static const String coreBaseUrl = 'http://localhost:8002';
+  static const Duration _timeout = Duration(seconds: 15);
 
   // ── helpers ──
   static Future<Map<String, String>> _headers() async {
@@ -45,6 +46,22 @@ class ApiService {
       return data;
     }
     throw Exception(_decode(res)['detail'] ?? 'Đăng nhập thất bại');
+  }
+
+  /// POST /api/auth/register
+  static Future<Map<String, dynamic>> register(Map<String, dynamic> body) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (res.statusCode == 201 || res.statusCode == 200) {
+      final data = _decode(res);
+      await AuthStorage.saveToken(data['token']);
+      await AuthStorage.saveUserData(data['data']);
+      return data;
+    }
+    throw Exception(_decode(res)['detail'] ?? 'Đăng ký thất bại');
   }
 
   /// GET /api/auth/me
@@ -162,6 +179,16 @@ class ApiService {
     );
     if (res.statusCode == 200) return _decode(res);
     throw Exception(_decode(res)['detail'] ?? 'Cập nhật trạng thái thất bại');
+  }
+
+  /// PATCH /api/shipper/orders/{ma_don_hang}/items/{ma_nguyen_lieu}/pickup
+  static Future<Map<String, dynamic>> updateOrderItemPickup(String orderId, String ingredientId) async {
+    final res = await http.patch(
+      Uri.parse('$coreBaseUrl/api/shipper/orders/$orderId/items/$ingredientId/pickup'),
+      headers: await _headers(),
+    );
+    if (res.statusCode == 200) return _decode(res);
+    throw Exception(_decode(res)['detail'] ?? 'Cập nhật lấy hàng thất bại');
   }
 
   /// GET /api/shipper/orders/{ma_don_hang}/details

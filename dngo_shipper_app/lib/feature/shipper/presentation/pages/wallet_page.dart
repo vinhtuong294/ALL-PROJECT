@@ -123,7 +123,7 @@ class _WalletPageState extends State<WalletPage> {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2F8000)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4CAF50)),
             child: const Text('Xác nhận', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -143,9 +143,9 @@ class _WalletPageState extends State<WalletPage> {
         iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2F8000)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF4CAF50)))
           : RefreshIndicator(
-              color: const Color(0xFF2F8000),
+              color: const Color(0xFF4CAF50),
               onRefresh: _loadData,
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -158,7 +158,7 @@ class _WalletPageState extends State<WalletPage> {
                       const Text('Lịch sử giao dịch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                       TextButton(
                         onPressed: () {},
-                        child: const Text('Tất cả', style: TextStyle(color: Color(0xFF2F8000))),
+                        child: const Text('Tất cả', style: TextStyle(color: Color(0xFF4CAF50))),
                       ),
                     ],
                   ),
@@ -187,11 +187,11 @@ class _WalletPageState extends State<WalletPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF2F8000),
+        color: const Color(0xFF4CAF50),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2F8000).withOpacity(0.3),
+            color: const Color(0xFF4CAF50).withOpacity(0.3),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -235,8 +235,8 @@ class _WalletPageState extends State<WalletPage> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: _requestCashout,
-                  icon: const Icon(Icons.arrow_upward, color: Color(0xFF2F8000), size: 18),
-                  label: const Text('Rút tiền', style: TextStyle(color: Color(0xFF2F8000), fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.arrow_upward, color: Color(0xFF4CAF50), size: 18),
+                  label: const Text('Rút tiền', style: TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

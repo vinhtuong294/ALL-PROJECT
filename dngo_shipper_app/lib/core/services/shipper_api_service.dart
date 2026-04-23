@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ShipperApiService {
   final Dio _dio;
-  final String _baseUrl = 'http://localhost:8000'; // 'http://207.180.233.84:8000';
+  final String _baseUrl = 'http://207.180.233.84:8000';
 
   ShipperApiService() : _dio = Dio() {
     _dio.options.baseUrl = _baseUrl;

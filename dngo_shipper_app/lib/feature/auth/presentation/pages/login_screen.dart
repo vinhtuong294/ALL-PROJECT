@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../feature/shipper/presentation/pages/main_screen.dart';
+import 'register_screen.dart'; // Import register screen
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,7 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       await ApiService.login(_usernameCtrl.text.trim(), _passwordCtrl.text);
-      // After login, fetch full profile to get wallet_id etc.
       await ApiService.getMe();
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -50,128 +50,151 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          Positioned(
-            left: 0, right: 0, bottom: -50,
-            child: Opacity(
-              opacity: 0.9,
-              child: Image.network(
-                'https://t3.ftcdn.net/jpg/04/47/98/69/360_F_447986940_l6TngbSOT1q8Ips4Ggq3q3PqOa8XZ0N5.jpg',
-                fit: BoxFit.cover,
-                height: MediaQuery.of(context).size.height * 0.6,
-                errorBuilder: (c, e, s) => Container(height: MediaQuery.of(context).size.height * 0.6, color: Colors.white),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [Colors.white, Colors.white.withValues(alpha: 0.6), Colors.transparent],
-                  stops: const [0.4, 0.6, 1.0],
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  const SizedBox(height: 60),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.network('https://cdn-icons-png.flaticon.com/512/3753/3753061.png', height: 48, color: const Color(0xFF2F8000),
-                        errorBuilder: (c, e, s) => const Icon(Icons.shopping_cart, size: 48, color: Color(0xFF2F8000)),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text('DNGo', style: TextStyle(color: Color(0xFF1E3A8A), fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                    ],
-                  ),
-                  const SizedBox(height: 60),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.lightBlue.shade100, width: 1.5),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Column(children: [
-                                  const Text('Đăng nhập', style: TextStyle(color: Color(0xFF2F8000), fontWeight: FontWeight.bold, fontSize: 16)),
-                                  const SizedBox(height: 4),
-                                  Container(width: 40, height: 2, color: Colors.red),
-                                ]),
-                                const Text('Đăng ký', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold, fontSize: 16)),
-                              ],
-                            ),
-                            const SizedBox(height: 32),
-                            Container(
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.lightBlue.shade200)),
-                              child: TextField(
-                                controller: _usernameCtrl,
-                                decoration: const InputDecoration(hintText: 'Tên đăng nhập', hintStyle: TextStyle(color: Colors.black54, fontSize: 14), prefixIcon: Icon(Icons.person_outline, size: 18, color: Colors.black54), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 14)),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Container(
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.lightBlue.shade200)),
-                              child: TextField(
-                                controller: _passwordCtrl,
-                                obscureText: _obscure,
-                                decoration: InputDecoration(
-                                  hintText: 'Mật khẩu', hintStyle: const TextStyle(color: Colors.black54, fontSize: 14),
-                                  prefixIcon: const Icon(Icons.lock_outline, size: 18, color: Colors.black54),
-                                  suffixIcon: IconButton(icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, size: 18, color: Colors.black54), onPressed: () => setState(() => _obscure = !_obscure)),
-                                  border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                                ),
-                              ),
-                            ),
-                            if (_error != null) ...[
-                              const SizedBox(height: 12),
-                              Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
-                            ],
-                            const SizedBox(height: 32),
-                            SizedBox(
-                              width: double.infinity, height: 48,
-                              child: ElevatedButton(
-                                onPressed: _loading ? null : _onLogin,
-                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1CB02A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), elevation: 0),
-                                child: _loading
-                                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Text('Đăng nhập', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('Bạn mới biết đến DNGo? ', style: TextStyle(color: Colors.black87, fontSize: 12)),
-                                GestureDetector(onTap: () {}, child: const Text('Đăng ký', style: TextStyle(color: Color(0xFF2F8000), fontWeight: FontWeight.bold, fontSize: 12))),
-                              ],
-                            ),
-                          ],
-                        ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Logo
+              Center(
+                child: Column(
+                  children: [
+                    Image.asset('assets/img/logo.png', height: 100),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'DÀNH CHO TÀI XẾ',
+                      style: TextStyle(
+                        color: Color(0xFF4CAF50),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
                       ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 48),
+
+              // Title
+              const Text(
+                'Đăng nhập',
+                style: TextStyle(
+                  color: Color(0xFF1E3A8A),
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Vui lòng đăng nhập để bắt đầu nhận đơn.',
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Form
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: TextField(
+                  controller: _usernameCtrl,
+                  decoration: const InputDecoration(
+                    hintText: 'Tên đăng nhập',
+                    hintStyle: TextStyle(color: Colors.black45, fontSize: 15),
+                    prefixIcon: Icon(Icons.person_outline, size: 22, color: Colors.black45),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: TextField(
+                  controller: _passwordCtrl,
+                  obscureText: _obscure,
+                  decoration: InputDecoration(
+                    hintText: 'Mật khẩu',
+                    hintStyle: const TextStyle(color: Colors.black45, fontSize: 15),
+                    prefixIcon: const Icon(Icons.lock_outline, size: 22, color: Colors.black45),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility, size: 20, color: Colors.black45),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 14))),
+                  ],
+                ),
+              ],
+              
+              // Forgot password?
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {},
+                  child: const Text('Quên mật khẩu?', style: TextStyle(color: Color(0xFF1E3A8A), fontWeight: FontWeight.w600)),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Button
+              SizedBox(
+                height: 54,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _onLogin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4CAF50),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
+                  child: _loading
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Đăng nhập', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Register Link
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('Bạn chưa có tài khoản? ', style: TextStyle(color: Colors.black54, fontSize: 15)),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen()));
+                    },
+                    child: const Text('Đăng ký ngay', style: TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
                 ],
               ),
-            ),
-          )
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

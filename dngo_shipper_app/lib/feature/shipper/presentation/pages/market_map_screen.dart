@@ -3,7 +3,8 @@ import '../../../../core/services/shipper_api_service.dart';
 import '../../data/models/market_map_stall.dart';
 
 class MarketMapScreen extends StatefulWidget {
-  const MarketMapScreen({Key? key}) : super(key: key);
+  final bool showAppBar;
+  const MarketMapScreen({Key? key, this.showAppBar = true}) : super(key: key);
 
   @override
   State<MarketMapScreen> createState() => _MarketMapScreenState();
@@ -14,10 +15,26 @@ class _MarketMapScreenState extends State<MarketMapScreen> {
   List<MarketMapStall> _stalls = [];
   String? _error;
 
-  final double cellWidth = 120.0;
-  final double cellHeight = 90.0;
-  final int totalCols = 14;
-  final int totalRows = 5;
+  final double cellWidth = 90.0;
+  final double cellHeight = 70.0;
+  final double pathWidth = 40.0;
+  final double mapMargin = 160.0;
+  final int totalCols = 20;
+  final int totalRows = 15;
+
+  double getColX(int col) {
+    double x = col * cellWidth;
+    if (col > 7) x += pathWidth;
+    if (col > 9) x += pathWidth;
+    return x;
+  }
+
+  double getRowY(int row) {
+    double y = row * cellHeight;
+    if (row > 4) y += pathWidth;
+    if (row > 9) y += pathWidth;
+    return y;
+  }
 
   final ShipperApiService _apiService = ShipperApiService();
 
@@ -90,13 +107,37 @@ class _MarketMapScreenState extends State<MarketMapScreen> {
     );
   }
 
+  Widget _buildZone(int startCol, int endCol, int startRow, int endRow, Color color, String label) {
+    double left = mapMargin + getColX(startCol);
+    double top = mapMargin + getRowY(startRow);
+    double width = getColX(endCol) + cellWidth - getColX(startCol);
+    double height = getRowY(endRow) + cellHeight - getRowY(startRow);
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.4), width: 2),
+        ),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 18)),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapContent() {
-    // 14 columns x 5 rows. 
-    // Data coordinates: X=0..11, Y=0..2
-    // We offset them by UX: offset X by +1, offset Y by +1
-    
-    final mapWidth = totalCols * cellWidth;
-    final mapHeight = totalRows * cellHeight;
+    final mapWidth = getColX(totalCols) + mapMargin * 2;
+    final mapHeight = getRowY(totalRows) + mapMargin * 2;
 
     return Center(
       child: InteractiveViewer(
@@ -108,88 +149,152 @@ class _MarketMapScreenState extends State<MarketMapScreen> {
           width: mapWidth,
           height: mapHeight,
           decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            border: Border.all(color: Colors.grey, width: 2),
+            color: const Color(0xFF2C3E50), // Dark theme matching reference map
             borderRadius: BorderRadius.circular(16),
           ),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // Background Zones (Offset X by +1, Y by +1)
-              // Zone Rau (X: 0->3) -> Cols 1 to 4
+              // Streets Background Lines mapping
               Positioned(
-                left: 1 * cellWidth, top: 1 * cellHeight,
-                width: 4 * cellWidth, height: 3 * cellHeight,
-                child: Container(color: Colors.green.withOpacity(0.15)),
+                left: 40,
+                top: mapHeight / 2 - 150,
+                child: RotatedBox(
+                  quarterTurns: 3,
+                  child: Text('NGUYEN BA LAN', style: TextStyle(color: Colors.white30, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 12)),
+                ),
               ),
-              // Zone Thịt (X: 4->7) -> Cols 5 to 8
               Positioned(
-                left: 5 * cellWidth, top: 1 * cellHeight,
-                width: 4 * cellWidth, height: 3 * cellHeight,
-                child: Container(color: Colors.red.withOpacity(0.1)),
+                bottom: 40,
+                left: mapWidth / 4,
+                child: Text('NGUYEN BA LAN', style: TextStyle(color: Colors.white30, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 12)),
               ),
-              // Zone Cá (X: 8->11) -> Cols 9 to 12
               Positioned(
-                left: 9 * cellWidth, top: 1 * cellHeight,
-                width: 4 * cellWidth, height: 3 * cellHeight,
-                child: Container(color: Colors.blue.withOpacity(0.15)),
+                top: 40,
+                left: mapWidth / 4,
+                child: Text('STREET MY DA DONG 2', style: TextStyle(color: Colors.white30, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 12)),
+              ),
+              Positioned(
+                right: 40,
+                top: mapHeight / 2 - 200,
+                child: RotatedBox(
+                  quarterTurns: 1,
+                  child: Text('STREET MY DA DONG 1', style: TextStyle(color: Colors.white30, fontSize: 36, fontWeight: FontWeight.bold, letterSpacing: 12)),
+                ),
               ),
 
-              // Labels for Zones
+              // Lối đi markers (Internal paths)
               Positioned(
-                left: 2.5 * cellWidth, top: 0.2 * cellHeight,
-                child: Text('KHU RAU CỦ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800], fontSize: 18)),
+                left: mapMargin + getColX(7) + cellWidth + 5,
+                top: mapMargin + 80,
+                width: pathWidth,
+                bottom: mapMargin + 80,
+                child: Center(
+                  child: RotatedBox(
+                    quarterTurns: 1,
+                    child: Text('L Ố I   Đ I', style: TextStyle(color: Colors.white12, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 20)),
+                  )
+                )
               ),
               Positioned(
-                left: 6.5 * cellWidth, top: 0.2 * cellHeight,
-                child: Text('KHU THỊT', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red[800], fontSize: 18)),
+                left: mapMargin + getColX(9) + cellWidth + 5,
+                top: mapMargin + 80,
+                width: pathWidth,
+                bottom: mapMargin + 80,
+                child: Center(
+                  child: RotatedBox(
+                    quarterTurns: 1,
+                    child: Text('L Ố I   Đ I', style: TextStyle(color: Colors.white12, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 20)),
+                  )
+                )
               ),
               Positioned(
-                left: 10.5 * cellWidth, top: 0.2 * cellHeight,
-                child: Text('KHU HẢI SẢN', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800], fontSize: 18)),
-              ),
-              
-              // 4 Ngã vào (Mũi tên chỉ lối vào)
-              Positioned(
-                left: mapWidth / 2 - 30, top: -10,
-                child: const Icon(Icons.arrow_downward, size: 40, color: Colors.orange),
-              ),
-              Positioned(
-                left: mapWidth / 2 - 30, bottom: -10,
-                child: const Icon(Icons.arrow_upward, size: 40, color: Colors.orange),
+                top: mapMargin + getRowY(4) + cellHeight + 5,
+                left: mapMargin + 80,
+                height: pathWidth,
+                right: mapMargin + 80,
+                child: Center(
+                  child: Text('L Ố I   Đ I   N G A N G', style: TextStyle(color: Colors.white12, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 20)),
+                )
               ),
               Positioned(
-                left: -10, top: mapHeight / 2 - 30,
-                child: const Icon(Icons.arrow_forward, size: 40, color: Colors.orange),
+                top: mapMargin + getRowY(9) + cellHeight + 5,
+                left: mapMargin + 80,
+                height: pathWidth,
+                right: mapMargin + 80,
+                child: Center(
+                  child: Text('L Ố I   Đ I   N G A N G', style: TextStyle(color: Colors.white12, fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 20)),
+                )
+              ),
+
+              // Background Zones
+              _buildZone(0, 9, 0, 4, Colors.greenAccent, 'KHU RAU CỦ & TRÁI CÂY'),
+              _buildZone(10, 19, 0, 4, Colors.redAccent, 'KHU THỊT CÁC LOẠI'),
+              _buildZone(0, 7, 5, 9, Colors.lightBlueAccent, 'KHU HẢI SẢN TƯƠI SỐNG'),
+              _buildZone(8, 19, 5, 9, Colors.purpleAccent, 'TẠP HÓA / ĐỒ KHÔ'),
+              _buildZone(0, 9, 10, 14, Colors.orangeAccent, 'ẨM THỰC / GIA VỊ'),
+
+              // 4 Entrances
+              Positioned(
+                left: mapMargin + getColX(10) - 40, top: mapMargin - 50,
+                child: Column(
+                  children: [
+                    const Icon(Icons.arrow_downward, size: 28, color: Colors.amber),
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.transparent), child: const Text('CỔNG BẮC', style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold))),
+                  ],
+                ),
               ),
               Positioned(
-                right: -10, top: mapHeight / 2 - 30,
-                child: const Icon(Icons.arrow_back, size: 40, color: Colors.orange),
+                left: mapMargin + getColX(10) - 60, bottom: mapMargin - 50,
+                child: Column(
+                  children: [
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.transparent), child: const Text('CỔNG NAM (Mặt chính)', style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold))),
+                    const Icon(Icons.arrow_upward, size: 28, color: Colors.amber),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: mapMargin - 70, top: mapMargin + getRowY(7) - 20,
+                child: Row(
+                  children: [
+                    const Icon(Icons.arrow_forward, size: 28, color: Colors.amber),
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: Colors.transparent), child: const Text('CỔNG\nTÂY', style: TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold))),
+                  ],
+                ),
+              ),
+              Positioned(
+                right: mapMargin - 70, top: mapMargin + getRowY(7) - 20,
+                child: Row(
+                  children: [
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: Colors.transparent), child: const Text('CỔNG\nĐÔNG', style: TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold))),
+                    const Icon(Icons.arrow_back, size: 28, color: Colors.amber),
+                  ],
+                ),
               ),
 
               // Render Stalls
               ..._stalls.map((stall) {
-                final double left = (stall.xCol + 1) * cellWidth;
-                final double top = (stall.yRow + 1) * cellHeight;
+                final double left = mapMargin + getColX(stall.xCol);
+                final double top = mapMargin + getRowY(stall.yRow);
                 final bool isClosed = stall.trangThai == "dong_cua";
 
                 return Positioned(
-                  left: left + 4, // Padding
-                  top: top + 4, 
+                  left: left + 4,
+                  top: top + 4,
                   width: cellWidth - 8,
                   height: cellHeight - 8,
                   child: GestureDetector(
                     onTap: () => _showStallDetail(context, stall),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: isClosed ? Colors.grey.shade300 : Colors.white,
+                        color: isClosed ? Colors.grey.shade400 : Colors.white,
                         border: Border.all(
-                          color: isClosed ? Colors.grey.shade500 : const Color(0xFF2F8000),
+                          color: isClosed ? Colors.grey.shade600 : const Color(0xFF2F8000),
                           width: 2,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: [
-                          if (!isClosed) const BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+                          if (!isClosed) BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: Offset(0, 2))
                         ]
                       ),
                       padding: const EdgeInsets.all(4),
@@ -200,20 +305,20 @@ class _MarketMapScreenState extends State<MarketMapScreen> {
                             stall.tenGianHang ?? 'Trống',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: isClosed ? Colors.grey.shade600 : Colors.black,
+                              fontSize: 11,
+                              color: isClosed ? Colors.white70 : Colors.black87,
                               decoration: isClosed ? TextDecoration.lineThrough : null,
                             ),
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             stall.nguoiBan ?? '',
                             style: TextStyle(
-                              fontSize: 10,
-                              color: isClosed ? Colors.grey.shade600 : Colors.blue.shade800,
+                              fontSize: 9,
+                              color: isClosed ? Colors.white60 : Colors.blue.shade900,
                             ),
                             textAlign: TextAlign.center,
                             maxLines: 1,
@@ -236,7 +341,7 @@ class _MarketMapScreenState extends State<MarketMapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F9),
-      appBar: AppBar(
+      appBar: widget.showAppBar ? AppBar(
         title: const Text('📍 Bản Đồ Sạp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF2F8000),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -246,7 +351,7 @@ class _MarketMapScreenState extends State<MarketMapScreen> {
             onPressed: () => _loadStalls(),
           )
         ],
-      ),
+      ) : null,
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : (_error != null 
