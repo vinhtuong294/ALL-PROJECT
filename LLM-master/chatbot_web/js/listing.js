@@ -13,7 +13,7 @@ const filters = {
   shops:  { minRating: 0, priceRanges: [], productType: '' },
 };
 
-const API = 'http://localhost:8000';
+const API = 'http://localhost:8001';
 
 // ─── INIT ──────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {

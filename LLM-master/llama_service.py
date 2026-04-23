@@ -6,7 +6,7 @@ Hỗ trợ cả context món ăn và context gian hàng.
 import ollama
 from typing import Optional
 
-MODEL = "qwen2.5:14b"
+MODEL = "qwen2.5:7b"
 
 SYSTEM_PROMPT = """
 /no_think
