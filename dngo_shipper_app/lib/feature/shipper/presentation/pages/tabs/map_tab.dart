@@ -35,6 +35,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
   bool _isOptimizing = false;
   String? _error;
   bool _showRouteInfo = true;
+  int _geocodeFailCount = 0;
 
   // Đà Nẵng center mặc định
   static const LatLng _defaultCenter = LatLng(16.0544, 108.2022);
@@ -71,6 +72,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
       final points = <_DeliveryPoint>[];
       String? firstConsolidationId;
       int jitterIndex = 0; // Dùng khi nhiều đơn cùng 1 địa chỉ
+      int failCount = 0;
 
       for (final order in orders) {
         // Lấy consolidation_id
@@ -112,17 +114,19 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
             totalAmount: order.totalAmount?.toDouble() ?? 0,
             location: coords,
           ));
+        } else {
+          failCount++;
         }
       }
 
       _consolidationId = firstConsolidationId;
 
       if (points.isEmpty) {
-        if (mounted) setState(() { _isLoading = false; _error = 'no_geocode'; });
+        if (mounted) setState(() { _isLoading = false; _error = 'no_geocode'; _geocodeFailCount = failCount; });
         return;
       }
 
-      if (mounted) setState(() { _deliveryPoints = points; _isLoading = false; });
+      if (mounted) setState(() { _deliveryPoints = points; _isLoading = false; _geocodeFailCount = failCount; });
 
       // Fit map
       _fitMapToPoints();
@@ -324,21 +328,25 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
     return null;
   }
 
-  /// Trích xuất phần đường từ address (bỏ quận, thành phố)
+  /// Trích xuất "số nhà + tên đường" từ địa chỉ đầy đủ.
+  /// Nominatim chỉ chấp nhận street="số nhà tên đường", không phải cả phường/quận.
+  /// VD: "123, Đường Nguyễn Văn Linh, Phước Ninh, Phường Hải Châu, TP Đà Nẵng, 02363"
+  /// kết quả: "123 Nguyễn Văn Linh"
   String _extractStreetOnly(String address) {
-    // Loại bỏ "Đà Nẵng", "Việt Nam", "số nhà"
-    String street = address
-      .replaceAll(RegExp(r',?\s*Đà Nẵng\b', caseSensitive: false), '')
-      .replaceAll(RegExp(r',?\s*Da Nang\b', caseSensitive: false), '')
-      .replaceAll(RegExp(r',?\s*Việt Nam\b', caseSensitive: false), '')
-      .replaceAll(RegExp(r',?\s*Vietnam\b', caseSensitive: false), '')
-      .replaceAll(RegExp(r',?\s*\d{5}\b'), '') // zip code
-      .trim();
-    
-    // Bỏ trailing comma
-    if (street.endsWith(',')) street = street.substring(0, street.length - 1).trim();
-    
-    return street;
+    // Tách theo dấu phẩy, lấy 2 phần đầu (số nhà + tên đường)
+    final parts = address.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (parts.isEmpty) return address;
+
+    String houseNumber = parts[0];
+    String streetName  = parts.length > 1 ? parts[1] : '';
+
+    // Bỏ prefix "Đường", "Phố", "Hẻm" nếu muốn Nominatim dễ tìm hơn
+    streetName = streetName
+        .replaceAll(RegExp(r'^(Đường|Phố|Hẻm|đường|phố|hẻm)\s+', caseSensitive: false), '')
+        .trim();
+
+    final result = streetName.isNotEmpty ? '$houseNumber $streetName' : houseNumber;
+    return result.trim();
   }
 
 
@@ -460,6 +468,31 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
           // ── Empty state ──
           if (!_isLoading && _error == 'no_orders')
             _buildEmptyState(),
+
+          // ── Geocode warning banner ──
+          if (!_isLoading && _geocodeFailCount > 0)
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: const Color(0xFFF57F17).withValues(alpha: 0.95),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$_geocodeFailCount đơn không thể hiển thị do địa chỉ không xác định được tọa độ.',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // ── Route info panel ──
           if (!_isLoading && _deliveryPoints.isNotEmpty && _showRouteInfo)
@@ -910,7 +943,7 @@ class _MapTabState extends State<MapTab> with TickerProviderStateMixin {
                 shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                 itemCount: _deliveryPoints.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final point = _deliveryPoints[index];
                   return ListTile(

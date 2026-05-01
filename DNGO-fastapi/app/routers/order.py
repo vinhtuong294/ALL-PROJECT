@@ -29,7 +29,7 @@ def list_orders(
     page: int = Query(1, ge=1),
     limit: int = Query(12, ge=1, le=100),
     tinh_trang_don_hang: Optional[str] = None,
-    sort: str = "order_time",
+    sort: str = "delivery_time",
     order: str = "desc",
     db: Session = Depends(get_db),
     current_user: AuthUser = Depends(allow("nguoi_mua"))

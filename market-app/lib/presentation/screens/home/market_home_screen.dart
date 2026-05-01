@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/auth/auth_bloc.dart';
@@ -161,18 +163,6 @@ class _MarketHomeScreenState extends State<MarketHomeScreen> {
     );
   }
 
-  void _goToAddVendor() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AddVendorScreen(
-          currentNav: _currentNav,
-          onNavTap: _handleNavTap,
-        ),
-      ),
-    );
-  }
-
   void _goToVendors() {
     Navigator.push(
       context,
@@ -242,7 +232,7 @@ class _MarketHomeScreenState extends State<MarketHomeScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Tổng thu thuế tháng',
+              const Text('Tổng thu tiền gian hàng',
                   style: TextStyle(color: Colors.white70, fontSize: 13)),
               const SizedBox(height: 2),
               Text(
@@ -317,9 +307,107 @@ class _MarketHomeScreenState extends State<MarketHomeScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          _GreenButton(label: 'Thêm Tiểu thương Mới', onTap: _goToAddVendor),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showSendFeeNotificationSheet() async {
+    final now = DateTime.now();
+    final monthLabel = '${now.month.toString().padLeft(2, '0')}/${now.year}';
+    final titleCtrl = TextEditingController(text: 'Thông báo thu phí tháng $monthLabel');
+    final bodyCtrl = TextEditingController(
+        text: 'Vui lòng thanh toán phí gian hàng tháng $monthLabel theo thông tin chuyển khoản đính kèm.');
+    bool sending = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Gửi thông báo phí',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('Thông báo sẽ gửi đến tất cả gian hàng chưa nộp phí tháng $monthLabel',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+              const SizedBox(height: 16),
+              TextField(
+                controller: titleCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Tiêu đề',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: bodyCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Nội dung',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: sending
+                      ? null
+                      : () async {
+                          setSheetState(() => sending = true);
+                          try {
+                            final dio = sl<Dio>();
+                            final resp = await dio.post(
+                              '/api/quan-ly-cho/gui-thong-bao-phi',
+                              data: jsonEncode({
+                                'title': titleCtrl.text.trim(),
+                                'body': bodyCtrl.text.trim(),
+                              }),
+                            );
+                            final sent = resp.data['sent'] ?? 0;
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Đã gửi thông báo đến $sent gian hàng')),
+                              );
+                            }
+                          } catch (e) {
+                            setSheetState(() => sending = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Gửi thông báo thất bại')),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: sending
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Gửi thông báo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -346,7 +434,7 @@ class _MarketHomeScreenState extends State<MarketHomeScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.account_balance_wallet_outlined,
@@ -354,7 +442,7 @@ class _MarketHomeScreenState extends State<MarketHomeScreen> {
                 ),
                 const SizedBox(width: 10),
                 const Text(
-                  'Thu Thuế Gian Hàng',
+                  'Thu Tiền Gian Hàng',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -368,7 +456,7 @@ class _MarketHomeScreenState extends State<MarketHomeScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF66BB6A).withOpacity(0.45),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -381,27 +469,53 @@ class _MarketHomeScreenState extends State<MarketHomeScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: OutlinedButton(
-                onPressed: _goToTaxCollection,
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  side: BorderSide.none,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text(
-                  'Thu Thuế Ngay',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: OutlinedButton(
+                      onPressed: _goToTaxCollection,
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text(
+                        'Thu Tiền',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 44,
+                    child: OutlinedButton.icon(
+                      onPressed: _showSendFeeNotificationSheet,
+                      icon: const Icon(Icons.send_rounded, size: 16),
+                      label: const Text(
+                        'Gửi thông báo',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white70),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

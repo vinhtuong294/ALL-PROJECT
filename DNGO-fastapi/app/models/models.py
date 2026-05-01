@@ -35,6 +35,7 @@ class OrderStatus(str, enum.Enum):
     chua_xac_nhan = "chua_xac_nhan"
     da_xac_nhan = "da_xac_nhan"
     cho_shipper = "cho_shipper"
+    dang_lay_hang = "dang_lay_hang"
     dang_giao = "dang_giao"
     da_giao = "da_giao"
     cho_hoan = "cho_hoan"
@@ -285,23 +286,22 @@ class Order(Base):
     total_amount = Column(Integer)
     delivery_address = Column(String(255), nullable=False)
     order_status = Column(String(20), nullable=False, default="chua_xac_nhan")
-    order_time = Column(DateTime, nullable=False)
+    order_time = Column(DateTime, nullable=True, server_default=func.now())
     delivery_time = Column(DateTime, nullable=False)
     delivery_long = Column(Float)
     delivery_lat = Column(Float)
     consolidation_id = Column(String(10), ForeignKey("consolidation.consolidation_id"))
     time_slot_id = Column(String(4), ForeignKey("time_slot.time_slot_id"))
-   
+    distance_km = Column(Float)
+
     buyer = relationship("Buyer", back_populates="orders")
     payment = relationship("Payment", back_populates="orders")
     reviews = relationship("Review", back_populates="order")
     review_shippers = relationship("ReviewShipper", back_populates="order")
-    order_time = Column(DateTime, nullable=True, server_default=func.now())
-    distance_km = Column(Float)
     
     __table_args__ = (
         CheckConstraint(
-            "order_status IN ('chua_xac_nhan', 'da_xac_nhan', 'cho_shipper', 'dang_giao', 'da_giao', 'cho_hoan', 'da_hoan', 'da_huy', 'hoan_thanh')",
+            "order_status IN ('chua_xac_nhan', 'da_xac_nhan', 'cho_shipper', 'dang_lay_hang', 'dang_giao', 'da_giao', 'cho_hoan', 'da_hoan', 'da_huy', 'hoan_thanh')",
             name="ck_order_status_valid"
         ),
     )
@@ -333,7 +333,6 @@ class Consolidation(Base):
    
     consolidation_id = Column(String(10), primary_key=True)
     shipper_id = Column(String(8), ForeignKey("shipper.shipper_id"), nullable=False)
-    shipping_time = Column(DateTime)
     shipping_time = Column(Integer)
    
     shipper = relationship("Shipper", back_populates="consolidations")
@@ -431,7 +430,7 @@ class Notification(Base):
     user_id = Column(String(6), ForeignKey("users.user_id"), nullable=False)
     title = Column(String(255), nullable=False)
     body = Column(Text)
-    data = Column(Text)  # lưu JSON string
+    data = Column(Text)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
 

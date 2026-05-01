@@ -1,12 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.middlewares.auth import allow, AuthUser, get_current_user
 from app.repositories import buyer as buyer_repo
 from app.repositories.buyer import refund_order_details
 from app.schemas.buyer import RefundRequest
+
+
+class CreateCategoryRequest(BaseModel):
+    ten_nhom_nguyen_lieu: str
+    loai_nhom_nguyen_lieu: Optional[str] = "thuc_pham"
+
+
+class CreateIngredientRequest(BaseModel):
+    ten_nguyen_lieu: str
+    ma_nhom_nguyen_lieu: str
 router = APIRouter(
     prefix="/api/buyer",
     tags=["Buyer"],
@@ -119,7 +130,6 @@ def list_ingredients(
     current_user: AuthUser = Depends(allow("nguoi_mua", "admin", "nguoi_ban"))
 ):
     """Lấy danh sách nguyên liệu"""
-    # TODO: Implement listNguyenLieuRepo equivalent
     return buyer_repo.list_ingredients(
     db=db,
     page=page, limit=limit,
@@ -156,6 +166,24 @@ def get_ingredient_detail(
         raise HTTPException(status_code=404, detail="Nguyên liệu không tồn tại")
     return {"success": True, **result}
 
+@router.post("/nguyen-lieu")
+def create_ingredient(
+    payload: CreateIngredientRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("nguoi_ban", "admin", "quan_ly_cho"))
+):
+    """Tạo nguyên liệu mới trong nhóm đã chọn"""
+    try:
+        result = buyer_repo.create_ingredient(
+            db=db,
+            ten_nguyen_lieu=payload.ten_nguyen_lieu.strip(),
+            ma_nhom_nguyen_lieu=payload.ma_nhom_nguyen_lieu.strip()
+        )
+        return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ==================== DANH MỤC NGUYÊN LIỆU (CATEGORY) ====================
 
 @router.get("/danh-muc-nguyen-lieu")
@@ -174,6 +202,24 @@ def list_categories(
         search=search, sort=sort, order=order
     )
     return result
+
+
+@router.post("/danh-muc-nguyen-lieu")
+def create_category(
+    payload: CreateCategoryRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("nguoi_ban", "admin", "quan_ly_cho"))
+):
+    """Tạo nhóm nguyên liệu mới"""
+    try:
+        result = buyer_repo.create_category(
+            db=db,
+            ten_nhom_nguyen_lieu=payload.ten_nhom_nguyen_lieu.strip(),
+            loai_nhom_nguyen_lieu=payload.loai_nhom_nguyen_lieu or "thuc_pham"
+        )
+        return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ==================== DANH MỤC MÓN ĂN (DISH CATEGORY) ====================
@@ -240,7 +286,7 @@ def get_dish_detail(
 @router.get("/time-slots")
 def get_time_slots(db: Session = Depends(get_db)):
     from app.models.models import TimeSlot
-    slots = db.query(TimeSlot).all()
+    slots = db.query(TimeSlot).order_by(TimeSlot.start_time).limit(100).all()
     return [
         {
             "time_slot_id": s.time_slot_id,
@@ -268,5 +314,5 @@ def refund_order(
         db=db,
         buyer_id=buyer.buyer_id,
         order_id=body.order_id,
-        items=[item.dict() for item in body.items]
+        items=[item.model_dump() for item in body.items]
     )

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:device_preview/device_preview.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
@@ -13,7 +15,10 @@ import 'injection_container.dart' as di;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await di.init();
-  runApp(const MyApp());
+  runApp(DevicePreview(
+    enabled: !kReleaseMode,
+    builder: (context) => const MyApp(),
+  ));
 }
 
 class MyApp extends StatelessWidget {
@@ -21,15 +26,21 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => di.sl<AuthBloc>()..add(AppStarted()),
+    return BlocProvider.value(
+      value: di.sl<AuthBloc>()..add(AppStarted()),
       child: MaterialApp(
         title: AppConstants.appName,
         debugShowCheckedModeBanner: false,
+        locale: DevicePreview.locale(context),
+        builder: DevicePreview.appBuilder,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.light,
-        home: BlocBuilder<AuthBloc, AuthState>(
+        home: BlocConsumer<AuthBloc, AuthState>(
+          listenWhen: (_, current) => current is Unauthenticated || current is AuthError,
+          listener: (context, state) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          },
           builder: (context, state) {
             if (state is Authenticated) {
               return const MarketHomeScreen();
@@ -37,9 +48,7 @@ class MyApp extends StatelessWidget {
               return const LoginScreen();
             }
             return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
+              body: Center(child: CircularProgressIndicator()),
             );
           },
         ),

@@ -18,15 +18,12 @@ def get_manage_id_by_user(db: Session, user_id: str) -> Optional[str]:
 
 
 def get_manage_id_fallback(db: Session, user_id: str) -> Optional[str]:
-    """Fallback: find manage_id by looking at stalls where user manages,
-    or return the first market_management record if admin-level user."""
-    # Try through stalls
-    stall = db.query(Stall).filter(Stall.manage_id != None).first()
-    if stall:
-        return stall.manage_id
-    # Try first record in market_management
-    manage = db.query(MarketManagement).first()
-    return manage.manage_id if manage else None
+    """Fallback: find manage_id for this specific user via MarketManagement or their stalls."""
+    manage = db.query(MarketManagement).filter(MarketManagement.user_id == user_id).first()
+    if manage:
+        return manage.manage_id
+    stall = db.query(Stall).filter(Stall.user_id == user_id, Stall.manage_id != None).first()
+    return stall.manage_id if stall else None
 
 
 def get_market_by_manage_id(db: Session, manage_id: str) -> Optional[str]:
@@ -90,7 +87,7 @@ def list_tieu_thuong(db: Session, manage_id: str, page: int = 1, limit: int = 10
             "page": page,
             "limit": limit,
             "total": total,
-            "total_pages": (total + limit - 1) // limit
+            "total_pages": max(1, (total + limit - 1) // limit)
         }
     }
 
@@ -113,7 +110,7 @@ def get_tieu_thuong_detail(db: Session, user_id: str, manage_id: str):
     if user.approval_status == 0 or stall is None:
         tinh_trang = "chua_co_gian_hang"
     else:
-        tinh_trang = user.active_status
+        tinh_trang = "hoat_dong" if user.active_status == "mo_cua" else "tam_nghi"
 
     return {
         "ma_nguoi_dung": user.user_id,
@@ -150,7 +147,8 @@ def register_stall(
     stall_location: str,
     grid_col: int,
     grid_row: int,
-    grid_floor: Optional[int] = None
+    grid_floor: Optional[int] = None,
+    stall_fee: float = 500000
 ):
     from datetime import date
     import random, string
@@ -199,7 +197,7 @@ def register_stall(
         grid_col=grid_col,
         grid_row=grid_row,
         grid_floor=grid_floor,
-        stall_fee=0
+        stall_fee=stall_fee
     )
     db.add(new_stall)
 
@@ -246,9 +244,12 @@ def get_dashboard_stats(db: Session, manage_id: str):
 
     mm, market, district, user = manage
 
-    # 2. Số lượng tiểu thương (đếm số user_id duy nhất có gian hàng)
-    active_merchants = db.query(func.count(func.distinct(Stall.user_id))).filter(
-        Stall.manage_id == manage_id
+    # 2. Số lượng tiểu thương đã duyệt (approval_status=1)
+    active_merchants = db.query(func.count(func.distinct(Stall.user_id))).join(
+        User, User.user_id == Stall.user_id
+    ).filter(
+        Stall.manage_id == manage_id,
+        User.approval_status == 1
     ).scalar() or 0
 
     # 2.1 Tổng số gian hàng
@@ -431,8 +432,8 @@ def list_stall_fees(
     limit: int = 20
 ):
     from app.models.models import User, Stall, StallFee, MarketManagement, Payment
-    from datetime import datetime
-    from sqlalchemy import func, or_, text
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, or_
 
     # month string "YYYY-MM" -> first day of month
     try:
@@ -440,20 +441,7 @@ def list_stall_fees(
     except ValueError:
         month_date = datetime.now().date().replace(day=1)
 
-    next_month = (month_date.replace(day=28) + __import__('datetime').timedelta(days=4)).replace(day=1)
-
-    # Single subquery for total_collected (avoids second round trip to remote DB)
-    total_collected_subq = (
-        db.query(func.coalesce(func.sum(StallFee.fee), 0.0))
-        .join(Stall, Stall.stall_id == StallFee.stall_id)
-        .filter(
-            Stall.manage_id == manage_id,
-            StallFee.month >= month_date,
-            StallFee.month < next_month,
-            StallFee.fee_status == "da_nop"
-        )
-        .scalar_subquery()
-    )
+    next_month = (month_date.replace(day=28) + timedelta(days=4)).replace(day=1)
 
     # Main query: join Stall + User + StallFee for the given month
     query = (
@@ -575,7 +563,7 @@ def get_stall_fee_detail(db: Session, fee_id: str):
     }
 
 
-def confirm_stall_fee_payment(db: Session, fee_id: str, payment_method: str, note: Optional[str], amount: float):
+def confirm_stall_fee_payment(db: Session, fee_id: str, payment_method: str, amount: float):
     from app.models.models import StallFee, Payment, Stall
     from datetime import datetime
     import uuid
@@ -588,14 +576,14 @@ def confirm_stall_fee_payment(db: Session, fee_id: str, payment_method: str, not
         stall = db.query(Stall).filter(Stall.stall_id == fee_id).first()
         if not stall:
             return None
-            
+
         current_month = datetime.now().date().replace(day=1)
         # Check if already exists for this stall/month (race condition guard)
         fee = db.query(StallFee).filter(
             StallFee.stall_id == stall.stall_id,
             StallFee.month == current_month
         ).first()
-        
+
         if not fee:
             # Create a new record on-the-fly
             new_id = f"FE{str(uuid.uuid4())[:5].upper()}"
@@ -606,7 +594,6 @@ def confirm_stall_fee_payment(db: Session, fee_id: str, payment_method: str, not
                 fee_status="da_nop",
                 fee_method=payment_method,
                 month=current_month,
-                note=note
             )
             db.add(fee)
             db.commit()
@@ -617,7 +604,6 @@ def confirm_stall_fee_payment(db: Session, fee_id: str, payment_method: str, not
     fee.fee_status = "da_nop"
     fee.fee_method = payment_method
     fee.fee = amount
-    fee.note = note
     
     # Update related payment record if it exists
     if hasattr(fee, 'payment_id') and fee.payment_id:
@@ -672,7 +658,6 @@ def get_dashboard_v2(db: Session, manage_id: str):
             "stall_name": s.stall_name,
             "status": u.active_status,
             "user_name": u.user_name,
-            "phone": u.phone,
             "category_ma": s.stall_location
         })
 
@@ -689,7 +674,7 @@ def get_dashboard_v2(db: Session, manage_id: str):
     }
 
 
-def update_stall_status(db: Session, stall_id: str, status: str, note: Optional[str] = None):
+def update_stall_status(db: Session, stall_id: str, status: str):
     from datetime import datetime
     import uuid
     from app.models.models import Stall, User
@@ -779,7 +764,7 @@ def list_pending_sellers(db: Session, page: int = 1, limit: int = 10, search: Op
             "page": page,
             "limit": limit,
             "total": total,
-            "total_pages": (total + limit - 1) // limit
+            "total_pages": max(1, (total + limit - 1) // limit)
         }
     }
 
@@ -800,3 +785,257 @@ def approve_seller(db: Session, user_id: str):
     db.commit()
 
     return {"success": True, "message": "Duyệt người bán thành công"}
+
+
+# ==================== ADMIN ====================
+
+def get_admin_dashboard(db: Session):
+    from datetime import date, timedelta
+    from sqlalchemy import func
+    from app.models.models import (
+        Market, Order, OrderDetail, Payment, Stall, Wallet, User
+    )
+
+    today = date.today()
+    first_day_month = today.replace(day=1)
+    seven_days_ago = today - timedelta(days=6)
+
+    # Tổng doanh thu (đơn đã thanh toán)
+    tong_doanh_thu = db.query(
+        func.coalesce(func.sum(OrderDetail.line_total), 0)
+    ).join(Order, Order.order_id == OrderDetail.order_id
+    ).join(Payment, Payment.payment_id == Order.payment_id
+    ).filter(Payment.payment_status == "da_thanh_toan").scalar() or 0
+
+    # Doanh thu tháng này
+    doanh_thu_thang = db.query(
+        func.coalesce(func.sum(OrderDetail.line_total), 0)
+    ).join(Order, Order.order_id == OrderDetail.order_id
+    ).join(Payment, Payment.payment_id == Order.payment_id
+    ).filter(
+        Payment.payment_status == "da_thanh_toan",
+        func.date(Payment.payment_time) >= first_day_month
+    ).scalar() or 0
+
+    # Doanh thu 7 ngày gần đây
+    daily_rows = db.query(
+        func.date(Payment.payment_time).label("ngay"),
+        func.coalesce(func.sum(OrderDetail.line_total), 0).label("tong")
+    ).join(Order, Order.order_id == OrderDetail.order_id
+    ).join(Payment, Payment.payment_id == Order.payment_id
+    ).filter(
+        Payment.payment_status == "da_thanh_toan",
+        func.date(Payment.payment_time) >= seven_days_ago
+    ).group_by(func.date(Payment.payment_time)).all()
+    doanh_thu_7_ngay = {str(r.ngay): int(r.tong) for r in daily_rows}
+
+    # Tổng & hôm nay
+    tong_don_hang = db.query(func.count(Order.order_id)).scalar() or 0
+    don_hang_hom_nay = db.query(func.count(Order.order_id)).filter(
+        func.date(Order.order_time) == today
+    ).scalar() or 0
+
+    # Đơn hàng theo trạng thái
+    status_rows = db.query(
+        Order.order_status, func.count(Order.order_id).label("count")
+    ).group_by(Order.order_status).all()
+    don_hang_theo_trang_thai = {r.order_status: r.count for r in status_rows}
+
+    # Số lượng user theo role
+    user_counts = db.query(
+        User.role, func.count(User.user_id).label("count")
+    ).group_by(User.role).all()
+    user_map = {r.role: r.count for r in user_counts}
+
+    # Tổng chợ và gian hàng
+    tong_cho = db.query(func.count(Market.market_id)).scalar() or 0
+    tong_gian_hang = db.query(func.count(Stall.stall_id)).scalar() or 0
+
+    # Ví sàn
+    platform_wallet = db.query(Wallet).filter(
+        Wallet.owner_id == "PLATFORM", Wallet.owner_type == "platform"
+    ).first()
+    platform_wallet_id = platform_wallet.wallet_id if platform_wallet else None
+
+    hoan_hang_total = db.query(
+        func.coalesce(func.sum(OrderDetail.line_total), 0)
+    ).join(Order, Order.order_id == OrderDetail.order_id
+    ).filter(OrderDetail.detail_status == "hoan_hang").scalar() or 0
+    so_du_vi_san = int(tong_doanh_thu) - int(hoan_hang_total)
+
+    # Doanh thu theo từng chợ
+    market_rows = db.query(
+        Market.market_id,
+        Market.market_name,
+        func.coalesce(func.sum(OrderDetail.line_total), 0).label("doanh_thu")
+    ).join(Stall, Stall.market_id == Market.market_id
+    ).join(OrderDetail, OrderDetail.stall_id == Stall.stall_id
+    ).join(Order, Order.order_id == OrderDetail.order_id
+    ).join(Payment, Payment.payment_id == Order.payment_id
+    ).filter(Payment.payment_status == "da_thanh_toan"
+    ).group_by(Market.market_id, Market.market_name).all()
+    doanh_thu_theo_cho = [
+        {"market_id": r.market_id, "market_name": r.market_name, "doanh_thu": int(r.doanh_thu)}
+        for r in market_rows
+    ]
+
+    return {
+        "tong_doanh_thu": int(tong_doanh_thu),
+        "doanh_thu_thang_nay": int(doanh_thu_thang),
+        "doanh_thu_7_ngay": doanh_thu_7_ngay,
+        "tong_don_hang": tong_don_hang,
+        "don_hang_hom_nay": don_hang_hom_nay,
+        "don_hang_theo_trang_thai": don_hang_theo_trang_thai,
+        "tong_nguoi_mua": user_map.get("nguoi_mua", 0),
+        "tong_nguoi_ban": user_map.get("nguoi_ban", 0),
+        "tong_shipper": user_map.get("shipper", 0),
+        "tong_quan_ly_cho": user_map.get("quan_ly_cho", 0),
+        "tong_cho": tong_cho,
+        "tong_gian_hang": tong_gian_hang,
+        "so_du_vi_san": so_du_vi_san,
+        "platform_wallet_id": platform_wallet_id,
+        "doanh_thu_theo_cho": doanh_thu_theo_cho,
+    }
+
+
+def list_admin_users(
+    db: Session,
+    role: Optional[str] = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20
+):
+    offset = (page - 1) * limit
+    query = db.query(User)
+
+    if role and role != "tat_ca":
+        query = query.filter(User.role == role)
+    else:
+        query = query.filter(User.role != "admin")
+
+    if search:
+        sf = f"%{search}%"
+        query = query.filter(
+            (User.user_name.ilike(sf)) |
+            (User.phone.ilike(sf)) |
+            (User.login_name.ilike(sf))
+        )
+
+    if status and status != "tat_ca":
+        query = query.filter(User.active_status == status)
+
+    total = query.count()
+    rows = query.order_by(User.user_id.desc()).offset(offset).limit(limit).all()
+
+    data = []
+    for user in rows:
+        item = {
+            "user_id": user.user_id,
+            "login_name": user.login_name,
+            "user_name": user.user_name,
+            "phone": user.phone,
+            "address": user.address,
+            "role": user.role,
+            "active_status": user.active_status,
+            "approval_status": user.approval_status,
+        }
+        if user.role == "nguoi_ban":
+            stall = db.query(Stall).filter(Stall.user_id == user.user_id).first()
+            item["stall_id"] = stall.stall_id if stall else None
+            item["stall_name"] = stall.stall_name if stall else None
+        data.append(item)
+
+    return {
+        "success": True,
+        "data": data,
+        "meta": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": max(1, (total + limit - 1) // limit)
+        }
+    }
+
+
+def admin_toggle_user_status(db: Session, user_id: str, new_status: str):
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        return None
+    if user.role == "admin":
+        raise ValueError("Không thể thay đổi trạng thái tài khoản admin")
+    if new_status not in ("mo_cua", "dong_cua"):
+        raise ValueError("Trạng thái không hợp lệ. Dùng: mo_cua / dong_cua")
+    user.active_status = new_status
+    db.commit()
+    return {
+        "success": True,
+        "message": "Cập nhật trạng thái thành công",
+        "user_id": user_id,
+        "new_status": new_status
+    }
+
+
+def send_fee_notifications(db: Session, manage_id: str, title: str, body: str):
+    from app.models.models import Stall, User, StallFee, Notification, MarketManagement
+    from datetime import datetime
+    import json
+    from urllib.parse import quote
+
+    current_month = datetime.now().date().replace(day=1)
+
+    # Get manager's bank info for QR code
+    mm = db.query(MarketManagement).filter(MarketManagement.manage_id == manage_id).first()
+    manager_user = db.query(User).filter(User.user_id == mm.user_id).first() if mm else None
+    bank_account = manager_user.bank_account if manager_user else None
+    bank_name = manager_user.bank_name if manager_user else None
+    bank_holder = manager_user.user_name if manager_user else ""
+
+    rows = db.query(Stall, User, StallFee).join(
+        User, User.user_id == Stall.user_id
+    ).outerjoin(
+        StallFee,
+        (StallFee.stall_id == Stall.stall_id) & (StallFee.month == current_month)
+    ).filter(Stall.manage_id == manage_id).all()
+
+    count = 0
+    for stall, user, fee in rows:
+        if fee is None or fee.fee_status == "da_nop":
+            continue
+
+        fee_amount = int(fee.fee)
+        transfer_content = f"PHI GH {stall.stall_id} {current_month.strftime('%m%Y')}"
+
+        qr_url = None
+        if bank_account and bank_name:
+            qr_url = (
+                f"https://img.vietqr.io/image/{quote(bank_name)}-{bank_account}-compact2.jpg"
+                f"?amount={fee_amount}"
+                f"&addInfo={quote(transfer_content)}"
+                f"&accountName={quote(bank_holder)}"
+            )
+
+        data_payload = json.dumps({
+            "type": "fee_payment",
+            "fee_id": fee.fee_id,
+            "stall_id": stall.stall_id,
+            "amount": fee_amount,
+            "qr_url": qr_url,
+            "bank_account": bank_account,
+            "bank_name": bank_name,
+            "bank_holder": bank_holder,
+            "transfer_content": transfer_content,
+        }, ensure_ascii=False)
+
+        noti = Notification(
+            user_id=user.user_id,
+            title=title,
+            body=body,
+            data=data_payload,
+            is_read=False,
+        )
+        db.add(noti)
+        count += 1
+
+    db.commit()
+    return {"success": True, "sent": count}

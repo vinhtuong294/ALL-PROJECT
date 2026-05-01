@@ -222,9 +222,11 @@ class _HistoryCard extends StatelessWidget {
               SizedBox(width: 8),
               Text('Mật khẩu: ', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
               Text(
-                '123456',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.error),
+                '••••••',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textSecondary),
               ),
+              SizedBox(width: 4),
+              Text('(mặc định 123456)', style: TextStyle(fontSize: 11, color: AppColors.textHint)),
             ],
           ),
           const SizedBox(height: 8),

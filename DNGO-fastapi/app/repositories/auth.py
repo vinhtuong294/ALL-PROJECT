@@ -115,7 +115,7 @@ def create_user_with_role(
         address=address,
         bank_account=bank_account or "",
         bank_name=bank_name or "",
-        approval_status=1
+        approval_status=0 if role == "nguoi_ban" else 1
     )
     db.add(new_user)
 

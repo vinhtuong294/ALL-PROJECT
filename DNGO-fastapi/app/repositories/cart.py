@@ -422,9 +422,10 @@ class CartRepository:
         # =========================
         # TÍNH DISTANCE + SHIP
         # =========================
-        distance = calculate_distance(market_address, body.delivery_address)
-        if distance is None:
-            raise HTTPException(400, "Địa chỉ giao hàng không hợp lệ")
+        try:
+            distance = calculate_distance(market_address, body.delivery_address)
+        except Exception:
+            distance = 5.0  # fallback khi geocoding API không khả dụng
         shipping_fee = calculate_shipping_fee(distance or 0)
 
         # =========================

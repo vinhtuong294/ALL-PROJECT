@@ -309,7 +309,7 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
                         _buildLabel('Loại hàng hóa *'),
                         _isLoadingCategories ? const LinearProgressIndicator() : _buildDropdown(),
                         const SizedBox(height: 14),
-                        _buildLabel('Tiền thuế mặc định/tháng *'),
+                        _buildLabel('Tiền gian hàng mặc định/tháng *'),
                         _buildTextField(
                           controller: _taxCtrl,
                           hintText: '500000',
@@ -373,7 +373,7 @@ class _AddVendorScreenState extends State<AddVendorScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Nhìn vào sơ đồ chợ và đếm từ góc trái trên. Cột = X, Hàng = Y.',
+                                  'Xem tab "Bản đồ chợ" để xác định vị trí. X = số cột từ trái sang (bắt đầu từ 0), Y = số hàng từ trên xuống (bắt đầu từ 0).',
                                   style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
                                 ),
                               ),

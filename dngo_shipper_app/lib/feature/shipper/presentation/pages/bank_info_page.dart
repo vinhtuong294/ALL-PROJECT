@@ -19,8 +19,10 @@ class _BankInfoPageState extends State<BankInfoPage> {
   @override
   void initState() {
     super.initState();
-    _accountCtrl = TextEditingController(text: widget.bankAccount != 'nulll' ? widget.bankAccount : '');
-    _bankCtrl = TextEditingController(text: widget.bankName != 'nulll' ? widget.bankName : '');
+    _accountCtrl = TextEditingController(
+        text: (widget.bankAccount != null && widget.bankAccount != 'null' && widget.bankAccount != 'nulll') ? widget.bankAccount : '');
+    _bankCtrl = TextEditingController(
+        text: (widget.bankName != null && widget.bankName != 'null' && widget.bankName != 'nulll') ? widget.bankName : '');
   }
 
   @override

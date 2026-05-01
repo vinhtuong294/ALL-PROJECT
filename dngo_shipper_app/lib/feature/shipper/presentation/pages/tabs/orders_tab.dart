@@ -3,7 +3,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter/material.dart';
 import '../../../../../core/services/api_service.dart';
-import '../../../../../core/services/auth_storage.dart';
 import '../../../../../core/utils/helpers.dart';
 import '../order_detail_page.dart';
 import '../../../../auth/presentation/pages/login_screen.dart';
@@ -20,15 +19,18 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
   List<dynamic> _myOrders = [];
   bool _loadingAvail = true;
   bool _loadingMy = true;
+  String? _availError;
   int _totalAvail = 0;
   int _totalMy = 0;
-  Set<String> _acceptingIds = {};
+  final Set<String> _acceptingIds = {};
 
   // ─── Auto-polling ────────────────────────────────────────────
   Timer? _pollingTimer;
   Set<String> _knownOrderIds = {};
-  bool _hasNewOrders = false;
+
   int _newOrderCount = 0;
+  String _statusFilter = 'all';
+  String _dateFilter = 'all';
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
@@ -57,9 +59,41 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _pulseController.dispose();
     _tabController.dispose();
     super.dispose();
   }
+
+  List<dynamic> get _filteredMyOrders {
+    var orders = List<dynamic>.from(_myOrders);
+    if (_statusFilter != 'all') {
+      final statuses = <String, List<String>>{
+        'waiting': ['cho_shipper'],
+        'delivering': ['dang_giao'],
+        'done': ['da_giao', 'hoan_thanh'],
+      }[_statusFilter] ?? [];
+      orders = orders.where((o) => statuses.contains(o['tinh_trang_don_hang'])).toList();
+    }
+    if (_dateFilter != 'all') {
+      final now = DateTime.now();
+      orders = orders.where((o) {
+        final dateStr = o['ngay_dat_hang']?.toString() ?? '';
+        if (dateStr.isEmpty) return true;
+        final dt = DateTime.tryParse(dateStr);
+        if (dt == null) return true;
+        if (_dateFilter == 'today') {
+          return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+        }
+        if (_dateFilter == 'week') return now.difference(dt).abs().inDays < 7;
+        if (_dateFilter == 'month') return dt.year == now.year && dt.month == now.month;
+        return true;
+      }).toList();
+    }
+    return orders;
+  }
+
+  int _countWithStatus(List<String> statuses) =>
+      _myOrders.where((o) => statuses.contains(o['tinh_trang_don_hang'])).length;
 
   void _startPolling() {
     _pollingTimer?.cancel();
@@ -99,6 +133,9 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
       } else {
         _knownOrderIds = newIds;
       }
+    } on UnauthorizedException {
+      debugPrint('🔒 [SHIPPER POLLING] Token expired — redirecting to login');
+      await _handleUnauthorized();
     } catch (e) {
       debugPrint('⚠️ [SHIPPER POLLING] Error: $e');
     }
@@ -116,12 +153,12 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF1B5E20), Color(0xFF4CAF50)],
+              colors: [Color(0xFF00B40F), Color(0xFF00B40F)],
             ),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                color: const Color(0xFF00B40F).withValues(alpha: 0.5),
                 blurRadius: 20,
                 offset: const Offset(0, 6),
               ),
@@ -176,34 +213,48 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
   }
 
   Future<void> _loadAvailable() async {
-    setState(() => _loadingAvail = true);
+    if (mounted) setState(() { _loadingAvail = true; _availError = null; });
     try {
       final data = await ApiService.getAvailableOrders(page: 1, limit: 50);
-      if (mounted) setState(() {
-        _available = data['items'] ?? [];
-        _totalAvail = data['total'] ?? 0;
-        _loadingAvail = false;
-        // Cập nhật danh sách ID đơn biết
-        _knownOrderIds = (_available)
-            .map((o) => (o['ma_don_hang'] ?? '').toString())
-            .where((id) => id.isNotEmpty)
-            .toSet();
-        _newOrderCount = 0;
-      });
+      if (mounted) {
+        setState(() {
+          _available = data['items'] ?? [];
+          _totalAvail = data['total'] ?? 0;
+          _loadingAvail = false;
+          _knownOrderIds = (_available)
+              .map((o) => (o['ma_don_hang'] ?? '').toString())
+              .where((id) => id.isNotEmpty)
+              .toSet();
+          _newOrderCount = 0;
+        });
+      }
+    } on UnauthorizedException {
+      await _handleUnauthorized();
     } catch (e) {
-      if (mounted) setState(() => _loadingAvail = false);
+      debugPrint('❌ [ORDERS] _loadAvailable error: $e');
+      if (mounted) {
+        setState(() {
+          _loadingAvail = false;
+          _availError = 'Lỗi: $e';
+        });
+      }
     }
   }
 
   Future<void> _loadMyOrders() async {
     setState(() => _loadingMy = true);
     try {
-      final data = await ApiService.getMyOrders(page: 1, limit: 50);
-      if (mounted) setState(() {
-        _myOrders = data['items'] ?? [];
-        _totalMy = data['total'] ?? 0;
-        _loadingMy = false;
-      });
+      final data = await ApiService.getMyOrders(
+        page: 1, limit: 100,
+        status: 'cho_shipper,dang_lay_hang,dang_giao,da_giao,hoan_thanh',
+      );
+      if (mounted) {
+        setState(() {
+          _myOrders = data['items'] ?? [];
+          _totalMy = data['total'] ?? 0;
+          _loadingMy = false;
+        });
+      }
     } on UnauthorizedException {
       await _handleUnauthorized();
     } catch (e) {
@@ -221,18 +272,80 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
     }
   }
 
+  // Giao cả chuyến: cập nhật dang_giao cho tất cả đơn trong consolidation
+  Future<void> _startDeliveryForTrip(List<Map<String, dynamic>> ordersInGroup) async {
+    final activeOrders = ordersInGroup.where((o) {
+      final s = o['tinh_trang_don_hang'] ?? '';
+      return s == 'cho_shipper' || s == 'dang_lay_hang';
+    }).toList();
+
+    if (activeOrders.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Giao cả chuyến?', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('Bắt đầu giao ${activeOrders.length} đơn trong chuyến này?\n\nChỉ những đơn đã lấy đủ hàng mới chuyển được.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00B40F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: const Text('Xác nhận', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    int success = 0;
+    final List<String> failed = [];
+
+    await Future.wait(activeOrders.map((o) async {
+      final orderId = o['ma_don_hang'] as String;
+      try {
+        await ApiService.updateOrderStatus(orderId, 'dang_giao');
+        success++;
+      } catch (e) {
+        failed.add(orderId);
+      }
+    }));
+
+    if (mounted) {
+      if (failed.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('🚀 Đã bắt đầu giao $success đơn!', style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: const Color(0xFF00B40F),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('✅ $success đơn giao được, ❌ ${failed.length} đơn chưa lấy đủ hàng', style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ));
+      }
+      _loadMyOrders();
+      _loadAvailable();
+    }
+  }
+
   Future<void> _acceptOrder(String orderId) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Xác nhận nhận đơn', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('Bạn có chắc chắn muốn bắt đầu giao đơn hàng $orderId không?'),
+        content: Text('Bạn có chắc chắn muốn nhận đơn hàng $orderId không?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Trở lại', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4CAF50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00B40F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             child: const Text('Nhận đơn', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -262,7 +375,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
               SizedBox(width: 8),
               Text('Nhận đơn thành công! Bắt đầu lấy hàng...', style: TextStyle(fontWeight: FontWeight.bold)),
             ]),
-            backgroundColor: const Color(0xFF4CAF50),
+            backgroundColor: const Color(0xFF00B40F),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -309,14 +422,16 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: 500,
-          height: 480,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(ctx).size.width * 0.92,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.65,
+          ),
           child: Column(
             children: [
               Container(
                 padding: const EdgeInsets.all(16),
-                color: const Color(0xFF4CAF50),
+                color: const Color(0xFF00B40F),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -402,7 +517,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
             decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
             child: TabBar(
               controller: _tabController,
-              indicator: BoxDecoration(color: const Color(0xFF4CAF50), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))]),
+              indicator: BoxDecoration(color: const Color(0xFF00B40F), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))]),
               labelColor: Colors.white,
               unselectedLabelColor: Colors.black54,
               indicatorSize: TabBarIndicatorSize.tab,
@@ -432,50 +547,35 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 20,
-        left: 20, right: 20, bottom: 20,
-      ),
-      color: const Color(0xFF4CAF50),
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 14, 12, 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Đơn hàng', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-          Row(
-            children: [
-              // Badge đơn mới
-              if (_newOrderCount > 0)
-                Container(
-                  margin: const EdgeInsets.only(right: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.amber,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.flash_on, color: Colors.black, size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$_newOrderCount mới',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              GestureDetector(
-                onTap: () { _loadAvailable(); _loadMyOrders(); },
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.refresh, color: Colors.white, size: 22),
+          const Expanded(
+            child: Text('Đơn hàng', style: TextStyle(color: Color(0xFF0F172A), fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+          ),
+          if (_newOrderCount > 0)
+            AnimatedBuilder(
+              animation: _pulseAnim,
+              builder: (_, child) => Transform.scale(scale: _pulseAnim.value, child: child),
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.flash_on, color: Colors.black87, size: 13),
+                    const SizedBox(width: 3),
+                    Text('$_newOrderCount mới', style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w900, fontSize: 12)),
+                  ],
                 ),
               ),
-            ],
+            ),
+          IconButton(
+            onPressed: () { _loadAvailable(); _loadMyOrders(); },
+            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF475569), size: 22),
+            padding: const EdgeInsets.all(8),
           ),
         ],
       ),
@@ -483,23 +583,37 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
   }
 
   Widget _buildAvailableTab() {
-    if (_loadingAvail) return const Center(child: CircularProgressIndicator(color: Color(0xFF4CAF50)));
+    if (_loadingAvail) return const Center(child: CircularProgressIndicator(color: Color(0xFF00B40F)));
+    if (_availError != null) {
+      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.cloud_off_rounded, size: 72, color: Colors.orange.shade300),
+        const SizedBox(height: 16),
+        Text(_availError!, style: TextStyle(color: Colors.grey.shade700, fontSize: 15), textAlign: TextAlign.center),
+        const SizedBox(height: 24),
+        ElevatedButton.icon(
+          onPressed: _loadAvailable,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Thử lại'),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00B40F), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+        ),
+      ]));
+    }
     if (_available.isEmpty) {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.inbox_rounded, size: 80, color: Colors.grey.shade300),
         const SizedBox(height: 16),
-        Text('Trống', style: TextStyle(color: Colors.grey.shade600, fontSize: 20, fontWeight: FontWeight.bold)),
+        Text('Chưa có đơn mới', style: TextStyle(color: Colors.grey.shade600, fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        const Text('Không có đơn hàng nào ở lúc này', style: TextStyle(color: Colors.grey, fontSize: 14)),
+        const Text('Hệ thống sẽ tự cập nhật khi có đơn', style: TextStyle(color: Colors.grey, fontSize: 14)),
         const SizedBox(height: 24),
         OutlinedButton.icon(
-          onPressed: _loadAvailable, icon: const Icon(Icons.refresh), label: const Text('Tải lại trạng thái'),
-          style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF4CAF50), side: const BorderSide(color: Color(0xFF4CAF50))),
+          onPressed: _loadAvailable, icon: const Icon(Icons.refresh), label: const Text('Tải lại'),
+          style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF00B40F), side: const BorderSide(color: Color(0xFF00B40F))),
         ),
       ]));
     }
     return RefreshIndicator(
-      color: const Color(0xFF4CAF50),
+      color: const Color(0xFF00B40F),
       onRefresh: _loadAvailable,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -510,52 +624,174 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
   }
 
   Widget _buildMyOrdersTab() {
-    if (_loadingMy) return const Center(child: CircularProgressIndicator(color: Color(0xFF4CAF50)));
-    if (_myOrders.isEmpty) {
-      return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.local_shipping_outlined, size: 80, color: Colors.grey.shade300),
-        const SizedBox(height: 16),
-        Text('Chưa có chuyến', style: TextStyle(color: Colors.grey.shade600, fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        const Text('Qua tab "Có sẵn" để tranh đơn nhé!', style: TextStyle(color: Colors.grey, fontSize: 14)),
-      ]));
-    }
-    
-    // Group orders by consolidationId
+    if (_loadingMy) return const Center(child: CircularProgressIndicator(color: Color(0xFF00B40F)));
+
+    final filtered = _filteredMyOrders;
+
     final Map<String, List<Map<String, dynamic>>> groupedOrders = {};
-    for (var order in _myOrders) {
+    for (var order in filtered) {
       final gomDon = order['gom_don'] as Map<String, dynamic>?;
       final cId = gomDon?['ma_gom_don'] ?? 'Đơn lẻ ${order['ma_don_hang']}';
-      if (!groupedOrders.containsKey(cId)) {
-        groupedOrders[cId] = [];
-      }
-      groupedOrders[cId]!.add(order as Map<String, dynamic>);
+      groupedOrders.putIfAbsent(cId, () => []).add(order as Map<String, dynamic>);
     }
 
-    return RefreshIndicator(
-      color: const Color(0xFF4CAF50),
-      onRefresh: _loadMyOrders,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: groupedOrders.keys.length,
-        itemBuilder: (ctx, i) {
-          final cId = groupedOrders.keys.elementAt(i);
-          final ordersInGroup = groupedOrders[cId]!;
-          return _buildConsolidationCard(cId, ordersInGroup);
-        },
+    return Column(
+      children: [
+        // Status filter chips
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _statusChip('all', 'Tất cả', _myOrders.length, Colors.grey.shade600),
+                const SizedBox(width: 8),
+                _statusChip('waiting', 'Chờ lấy hàng', _countWithStatus(['cho_shipper']), Colors.orange),
+                const SizedBox(width: 8),
+                _statusChip('delivering', 'Đang giao', _countWithStatus(['dang_giao']), Colors.blue),
+                const SizedBox(width: 8),
+                _statusChip('done', 'Hoàn tất', _countWithStatus(['da_giao', 'hoan_thanh']), Colors.green),
+              ],
+            ),
+          ),
+        ),
+        // Date filter chips
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _dateChip('all', 'Mọi ngày'),
+                const SizedBox(width: 8),
+                _dateChip('today', 'Hôm nay'),
+                const SizedBox(width: 8),
+                _dateChip('week', 'Tuần này'),
+                const SizedBox(width: 8),
+                _dateChip('month', 'Tháng này'),
+              ],
+            ),
+          ),
+        ),
+        const Divider(height: 1, color: Color(0xFFE5E7EB)),
+        // Order list
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(
+                      _myOrders.isEmpty
+                          ? Icons.local_shipping_outlined
+                          : Icons.filter_list_off_rounded,
+                      size: 80, color: Colors.grey.shade300,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _myOrders.isEmpty ? 'Chưa có chuyến' : 'Không có đơn phù hợp',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _myOrders.isEmpty
+                          ? 'Qua tab "Có sẵn" để tranh đơn nhé!'
+                          : 'Thử thay đổi bộ lọc',
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ]),
+                )
+              : RefreshIndicator(
+                  color: const Color(0xFF00B40F),
+                  onRefresh: _loadMyOrders,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: groupedOrders.keys.length,
+                    itemBuilder: (ctx, i) {
+                      final cId = groupedOrders.keys.elementAt(i);
+                      return _buildConsolidationCard(cId, groupedOrders[cId]!);
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statusChip(String value, String label, int count, Color color) {
+    final isSelected = _statusFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _statusFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? color : Colors.grey.shade300),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(label, style: TextStyle(
+            fontSize: 13, fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+          )),
+          if (count > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withValues(alpha: 0.25)
+                    : color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text('$count', style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w900,
+                color: isSelected ? Colors.white : color,
+              )),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  Widget _dateChip(String value, String label) {
+    final isSelected = _dateFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _dateFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF00B40F).withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF00B40F) : Colors.grey.shade300,
+          ),
+        ),
+        child: Text(label, style: TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w600,
+          color: isSelected ? const Color(0xFF00B40F) : Colors.grey.shade600,
+        )),
       ),
     );
   }
 
   Widget _buildConsolidationCard(String consolidationId, List<Map<String, dynamic>> ordersInGroup) {
     bool allDelivered = ordersInGroup.every((o) => o['tinh_trang_don_hang'] == 'da_giao' || o['tinh_trang_don_hang'] == 'hoan_thanh');
+    final activeOrders = ordersInGroup.where((o) {
+      final s = o['tinh_trang_don_hang'] ?? '';
+      return s == 'cho_shipper' || s == 'dang_lay_hang';
+    }).toList();
+    final canStartTrip = !allDelivered && activeOrders.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: allDelivered ? Colors.green.withValues(alpha: 0.3) : const Color(0xFF4CAF50).withValues(alpha: 0.3), width: 2),
+        border: Border.all(color: allDelivered ? Colors.green.withValues(alpha: 0.3) : const Color(0xFF00B40F).withValues(alpha: 0.3), width: 2),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
@@ -565,7 +801,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: allDelivered ? Colors.green.withValues(alpha: 0.1) : const Color(0xFF4CAF50).withValues(alpha: 0.1),
+              color: allDelivered ? Colors.green.withValues(alpha: 0.1) : const Color(0xFF00B40F).withValues(alpha: 0.1),
               borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
             ),
             child: Row(
@@ -573,11 +809,11 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.route, color: allDelivered ? Colors.green : const Color(0xFF4CAF50)),
+                    Icon(Icons.route, color: allDelivered ? Colors.green : const Color(0xFF00B40F)),
                     const SizedBox(width: 8),
                     Text(
                       consolidationId.startsWith('Đơn lẻ') ? 'Đơn hàng lẻ' : 'Chuyến đi $consolidationId',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: allDelivered ? Colors.green.shade700 : const Color(0xFF4CAF50)),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: allDelivered ? Colors.green.shade700 : const Color(0xFF00B40F)),
                     ),
                   ],
                 ),
@@ -586,7 +822,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
                   child: Text(
                     '${ordersInGroup.length} Đơn',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: allDelivered ? Colors.green.shade700 : const Color(0xFF4CAF50)),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: allDelivered ? Colors.green.shade700 : const Color(0xFF00B40F)),
                   ),
                 ),
               ],
@@ -595,7 +831,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
           
           // Các đơn hàng bên trong
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             child: Column(
               children: ordersInGroup.map((o) {
                 return Padding(
@@ -603,6 +839,33 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
                   child: _buildMyOrderCard(o, isInsideGroup: true),
                 );
               }).toList(),
+            ),
+          ),
+
+          // Nút Giao cả chuyến
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            child: Tooltip(
+              message: canStartTrip ? '' : 'Cần lấy hàng đủ từ tất cả quầy trước khi giao',
+              child: SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton.icon(
+                  onPressed: canStartTrip ? () => _startDeliveryForTrip(ordersInGroup) : null,
+                  icon: Icon(Icons.local_shipping_rounded, size: 18, color: canStartTrip ? Colors.white : Colors.grey[400]),
+                  label: Text(
+                    'GIAO CẢ CHUYẾN (${activeOrders.length} đơn)',
+                    style: TextStyle(color: canStartTrip ? Colors.white : Colors.grey[400], fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.3),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: canStartTrip ? const Color(0xFF00B40F) : Colors.grey[200],
+                    disabledBackgroundColor: Colors.grey[200],
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: canStartTrip ? 3 : 0,
+                    shadowColor: const Color(0xFF00B40F).withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -621,7 +884,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
             children: [
               Container(width: 12, height: 12, decoration: BoxDecoration(color: Colors.orange.shade500, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2))),
               Container(width: 2, height: 40, color: Colors.grey.shade300),
-              Container(width: 12, height: 12, decoration: BoxDecoration(color: const Color(0xFF4CAF50), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2))),
+              Container(width: 12, height: 12, decoration: BoxDecoration(color: const Color(0xFF00B40F), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2))),
             ],
           ),
           const SizedBox(width: 16),
@@ -675,12 +938,21 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
     final orderId = order['ma_don_hang'] ?? '';
     final isAccepting = _acceptingIds.contains(orderId);
     final storeName = order['ten_cho']?.toString().isNotEmpty == true ? order['ten_cho'] : 'Chợ Bắc Mỹ An';
+    final products = (order['san_pham'] as List<dynamic>?) ?? [];
+    final itemCount = products.length;
+    final stallCount = products.map((p) => p['ten_gian_hang']).toSet().length;
     // Khung giờ giao hàng
     final khungGio = order['khung_gio'] as Map<String, dynamic>?;
-    final gioGiao = khungGio != null
-        ? '${(khungGio['gio_bat_dau'] ?? '').toString().substring(0, 5)}–${(khungGio['gio_ket_thuc'] ?? '').toString().substring(0, 5)}'
-        : null;
-
+    String? gioGiao;
+    if (khungGio != null) {
+      final bat = (khungGio['gio_bat_dau'] ?? '').toString();
+      final ket = (khungGio['gio_ket_thuc'] ?? '').toString();
+      final batStr = bat.length >= 5 ? bat.substring(0, 5) : bat;
+      final ketStr = ket.length >= 5 ? ket.substring(0, 5) : ket;
+      if (batStr != '00:00' || ketStr != '00:00') {
+        gioGiao = '$batStr–$ketStr';
+      }
+    }
 
     return GestureDetector(
       onTap: () async {
@@ -692,19 +964,16 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4))]),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-            Row(mainAxisSize: MainAxisSize.min, children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
                 child: Text('#$orderId', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.orange.shade800, fontSize: 13, letterSpacing: 0.5)),
               ),
-              if (gioGiao != null) ...[
-                const SizedBox(width: 8),
+              if (gioGiao != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
@@ -714,17 +983,27 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
                     Text(gioGiao, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.blue.shade700)),
                   ]),
                 ),
-              ],
-            ]),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.route, size: 16, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text('${(distance != null ? (distance as num) : 0).toStringAsFixed(1)} KM', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              ],
-            )
-          ]),
+              if (itemCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+                  child: Text('$itemCount món · $stallCount quầy', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.green.shade700)),
+                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.route, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    distance != null && distance > 0
+                        ? '${distance.toStringAsFixed(1)} km'
+                        : '-- km',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ],
+              ),
+            ],
+          ),
 
           const SizedBox(height: 16),
           _buildRouteTimeline(
@@ -754,7 +1033,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 const Text('Tổng thu', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                Text(formatVND(order['tong_tien']), style: const TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.w900, fontSize: 18)),
+                Text(formatVND(order['tong_tien']), style: const TextStyle(color: Color(0xFF00B40F), fontWeight: FontWeight.w900, fontSize: 18)),
               ],
             )
           ]),
@@ -764,10 +1043,10 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
             child: ElevatedButton(
               onPressed: isAccepting ? null : () => _acceptOrder(orderId),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
+                backgroundColor: const Color(0xFF00B40F),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 4,
-                shadowColor: const Color(0xFF4CAF50).withValues(alpha: 0.4),
+                shadowColor: const Color(0xFF00B40F).withValues(alpha: 0.4),
               ),
               child: isAccepting
                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
@@ -787,10 +1066,16 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
     final distance = order['distance_km'];
     final storeName = order['ten_cho']?.toString().isNotEmpty == true ? order['ten_cho'] : 'Chợ Bắc Mỹ An';
     final khungGio = order['khung_gio'] as Map<String, dynamic>?;
-    final gioGiao = khungGio != null
-        ? '${(khungGio['gio_bat_dau'] ?? '').toString().substring(0, 5)}–${(khungGio['gio_ket_thuc'] ?? '').toString().substring(0, 5)}'
-        : null;
-
+    String? gioGiao;
+    if (khungGio != null) {
+      final bat = (khungGio['gio_bat_dau'] ?? '').toString();
+      final ket = (khungGio['gio_ket_thuc'] ?? '').toString();
+      final batStr = bat.length >= 5 ? bat.substring(0, 5) : bat;
+      final ketStr = ket.length >= 5 ? ket.substring(0, 5) : ket;
+      if (batStr != '00:00' || ketStr != '00:00') {
+        gioGiao = '$batStr–$ketStr';
+      }
+    }
 
     Color statusColor;
     IconData statusIcon;
@@ -836,27 +1121,23 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(statusIcon, color: statusColor, size: 14),
-                  const SizedBox(width: 6),
-                  Text(statusLabel(status).toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-                ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(statusIcon, color: statusColor, size: 14),
+                    const SizedBox(width: 6),
+                    Text(statusLabel(status).toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
+                  ],
+                ),
               ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-              if (gioGiao != null) ...[
+              if (gioGiao != null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
@@ -866,11 +1147,9 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
                     Text(gioGiao, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.blue.shade700)),
                   ]),
                 ),
-                const SizedBox(width: 8),
-              ],
               Text(formatVND(order['tong_tien']), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-            ]),
-          ]),
+            ],
+          ),
           const SizedBox(height: 16),
           _buildRouteTimeline(
             storeName, 
@@ -923,7 +1202,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
             future: ApiService.getOrderDetails(orderId),
             builder: (_, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(color: Color(0xFF4CAF50)));
+                return const Center(child: CircularProgressIndicator(color: Color(0xFF00B40F)));
               }
               if (snap.hasError) {
                 return Center(child: Text('Lỗi: ${snap.error}'));
@@ -931,7 +1210,6 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
               final data = snap.data?['data'] ?? {};
               final products = (data['san_pham'] as List<dynamic>?) ?? [];
               final addr = AddressHelper.parse(data['dia_chi_giao_hang'] ?? '');
-              final buyer = data['nguoi_mua'] ?? {};
 
               return ListView(
                 controller: scrollCtrl,
@@ -971,7 +1249,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
                   ...products.map((p) => Container(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('${p['so_luong']}x', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4CAF50))),
+                      Text('${p['so_luong']}x', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF00B40F))),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(p['ten_nguyen_lieu'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -983,7 +1261,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
                   const Divider(height: 32),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     const Text('Tổng thu từ khách', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(formatVND(data['tong_tien']), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Color(0xFF4CAF50))),
+                    Text(formatVND(data['tong_tien']), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Color(0xFF00B40F))),
                   ]),
                   const SizedBox(height: 32),
                   SizedBox(
@@ -993,7 +1271,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
                         Navigator.pop(ctx);
                         _acceptOrder(orderId);
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4CAF50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00B40F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
                       child: const Text('NHẬN ĐƠN NGAY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
                     ),
                   ),

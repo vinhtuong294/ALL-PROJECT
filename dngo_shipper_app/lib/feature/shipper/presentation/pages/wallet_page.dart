@@ -22,39 +22,22 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _loading = true);
+
     try {
-      final balanceTask = ApiService.getWalletBalance();
-      // Earnings API có thể đóng vai trò như lịch sử giao dịch cộng tiền tạm thời
-      final earningsTask = ApiService.getEarnings(); 
-
-      final results = await Future.wait([balanceTask, earningsTask]);
-      final balanceData = results[0];
-      final earningsData = results[1];
-
+      final b = await ApiService.getWalletBalance();
       if (mounted) {
         setState(() {
-          _walletBalance = balanceData['so_du_kha_dung'] ?? balanceData['so_du'] ?? 0;
-          _tienDangChoRut = balanceData['tien_dang_cho_rut'] ?? 0;
-          _transactions = earningsData['data'] ?? [];
-          _loading = false;
+          _walletBalance = b['so_du_kha_dung'] ?? b['so_du'] ?? 0;
+          _tienDangChoRut = b['tien_dang_cho_rut'] ?? 0;
+          // chi_tiet is the transaction history from the balance endpoint
+          _transactions = (b['chi_tiet'] as List<dynamic>?) ?? [];
         });
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _loading = false);
-        // Có thể API earnings chưa có, fallback balance
-        try {
-          final b = await ApiService.getWalletBalance();
-          if(mounted) {
-            setState(() {
-              _walletBalance = b['so_du_kha_dung'] ?? b['so_du'] ?? 0;
-              _tienDangChoRut = b['tien_dang_cho_rut'] ?? 0;
-            });
-          }
-        } catch (_) {}
-      }
-    }
+    } catch (_) {}
+
+    if (mounted) setState(() => _loading = false);
   }
 
   void _requestCashout() {
@@ -113,17 +96,20 @@ class _WalletPageState extends State<WalletPage> {
                   accountNoCtrl.text,
                   accountNameCtrl.text,
                 );
-                
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx); // close loading
                 Navigator.pop(ctx); // close form
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yêu cầu rút tiền thành công!')));
-                _loadData(); // reload balance
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yêu cầu rút tiền thành công!')));
+                  _loadData();
+                }
               } catch (e) {
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx); // close loading
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4CAF50)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00B40F)),
             child: const Text('Xác nhận', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -143,9 +129,9 @@ class _WalletPageState extends State<WalletPage> {
         iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF4CAF50)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF00B40F)))
           : RefreshIndicator(
-              color: const Color(0xFF4CAF50),
+              color: const Color(0xFF00B40F),
               onRefresh: _loadData,
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -158,7 +144,7 @@ class _WalletPageState extends State<WalletPage> {
                       const Text('Lịch sử giao dịch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                       TextButton(
                         onPressed: () {},
-                        child: const Text('Tất cả', style: TextStyle(color: Color(0xFF4CAF50))),
+                        child: const Text('Tất cả', style: TextStyle(color: Color(0xFF00B40F))),
                       ),
                     ],
                   ),
@@ -187,11 +173,11 @@ class _WalletPageState extends State<WalletPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF4CAF50),
+        color: const Color(0xFF00B40F),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4CAF50).withOpacity(0.3),
+            color: const Color(0xFF00B40F).withValues(alpha:0.3),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -216,7 +202,7 @@ class _WalletPageState extends State<WalletPage> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha:0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -235,8 +221,8 @@ class _WalletPageState extends State<WalletPage> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: _requestCashout,
-                  icon: const Icon(Icons.arrow_upward, color: Color(0xFF4CAF50), size: 18),
-                  label: const Text('Rút tiền', style: TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.arrow_upward, color: Color(0xFF00B40F), size: 18),
+                  label: const Text('Rút tiền', style: TextStyle(color: Color(0xFF00B40F), fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -264,12 +250,30 @@ class _WalletPageState extends State<WalletPage> {
     );
   }
 
+  static const _loaiLabel = {
+    'phi_ship': 'Phí giao hàng',
+    'loi_giao_hang': 'Phạt giao trễ',
+    'hoan_tien': 'Hoàn tiền',
+    'nap_tien': 'Nạp tiền',
+    'rut_tien': 'Rút tiền',
+  };
+
+  String _formatDate(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
   Widget _buildTransactionItem(Map<String, dynamic> tx) {
-    // Parser dummy since earnings API might return different keys
-    final amount = tx['so_tien'] ?? tx['thu_nhap'] ?? 0;
-    final isAdd = amount >= 0;
-    final date = tx['ngay'] ?? tx['thoi_gian'] ?? 'Hôm nay';
-    final description = tx['mo_ta'] ?? 'Doanh thu đơn hàng';
+    final amount = (tx['so_tien'] ?? 0) as num;
+    final isAdd = (tx['huong'] ?? '') == 'vao';
+    final date = _formatDate(tx['ngay']?.toString());
+    final loai = tx['loai']?.toString() ?? '';
+    final description = _loaiLabel[loai] ?? loai.replaceAll('_', ' ');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -278,7 +282,7 @@ class _WalletPageState extends State<WalletPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(color: Colors.black.withValues(alpha:0.02), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Row(
@@ -301,14 +305,19 @@ class _WalletPageState extends State<WalletPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(description, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text(date, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                const SizedBox(height: 3),
+                if (tx['cancel_reason'] != null)
+                  Text(tx['cancel_reason'], style: TextStyle(color: Colors.orange.shade700, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (tx['order_id'] != null)
+                  Text('Đơn: ${tx['order_id']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(date, style: const TextStyle(color: Colors.grey, fontSize: 12)),
               ],
             ),
           ),
           Text(
-            '${isAdd ? '+' : ''}${formatVND(amount)}',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isAdd ? Colors.green : Colors.red),
+            '${isAdd ? '+' : '-'}${formatVND(amount.toInt())}',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isAdd ? const Color(0xFF00B40F) : Colors.red),
           ),
         ],
       ),

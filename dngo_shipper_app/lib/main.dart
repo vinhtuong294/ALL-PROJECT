@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:device_preview/device_preview.dart';
 import 'firebase_options.dart';
 import 'feature/auth/presentation/pages/splash_screen.dart';
 
@@ -9,7 +10,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const DNGO_ShipperApp());
+  runApp(DevicePreview(
+    enabled: !kReleaseMode,
+    builder: (context) => const DNGO_ShipperApp(),
+  ));
 }
 
 class DNGO_ShipperApp extends StatelessWidget {
@@ -20,6 +24,8 @@ class DNGO_ShipperApp extends StatelessWidget {
     return MaterialApp(
       title: 'DNGO Shipper',
       debugShowCheckedModeBanner: false,
+      locale: DevicePreview.locale(context),
+      builder: DevicePreview.appBuilder,
       theme: ThemeData(
         fontFamily: 'Inter',
         primaryColor: const Color(0xFF2F8000), // Primary Green

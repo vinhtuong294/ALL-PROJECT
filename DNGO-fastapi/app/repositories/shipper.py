@@ -1,12 +1,13 @@
+from collections import defaultdict
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import func
 from typing import Optional, Dict, Any
-from datetime import datetime
 from app.models.models import (
     Shipper, Order, OrderDetail, Consolidation,
-    Buyer, User, TimeSlot, Payment
+    User, TimeSlot, Goods, Ingredient,
 )
 from app.models.models import Market, Stall as StallModel
+from app.models.models import Buyer as BuyerModel, Payment as PaymentModel
 import secrets
 
 
@@ -28,83 +29,132 @@ def get_shipper_by_user_id(db: Session, user_id: str):
 def list_available_orders(db: Session, page: int = 1, limit: int = 10,
                           order_status: Optional[str] = None) -> Dict[str, Any]:
     skip = (page - 1) * limit
+    status = order_status or "da_xac_nhan"
 
-    if order_status:
-        query = db.query(Order).filter(
-            Order.order_status == order_status,
-            Order.consolidation_id == None  # thêm dòng này
-        )
-    else:
-        query = db.query(Order).filter(
-            Order.order_status.in_(["da_xac_nhan", "dang_giao"]),
-            Order.consolidation_id == None  # thêm dòng này
-        )
-    
-    query = query.order_by(Order.distance_km.asc().nullslast())
-    total = query.count()
-    orders = query.offset(skip).limit(limit).all()
+    base_filter = [Order.order_status == status, Order.consolidation_id == None]
+    total = db.query(func.count(Order.order_id)).filter(*base_filter).scalar()
+    orders = (
+        db.query(Order)
+        .filter(*base_filter)
+        .order_by(Order.distance_km.asc().nullslast())
+        .offset(skip).limit(limit)
+        .all()
+    )
 
+    if not orders:
+        return {"items": [], "total": total, "page": page, "limit": limit,
+                "totalPages": (total + limit - 1) // limit}
+
+    order_ids = [o.order_id for o in orders]
+
+    # ── Batch 1: market name ────────────────────────────────────────────────
+    market_map = {
+        row[0]: row[1]
+        for row in (
+            db.query(OrderDetail.order_id, Market.market_name)
+            .join(StallModel, StallModel.stall_id == OrderDetail.stall_id)
+            .join(Market, Market.market_id == StallModel.market_id)
+            .filter(OrderDetail.order_id.in_(order_ids))
+            .all()
+        )
+    }
+
+    # ── Batch 2: time slots ─────────────────────────────────────────────────
+    ts_ids = {o.time_slot_id for o in orders if o.time_slot_id}
+    ts_map = (
+        {ts.time_slot_id: ts for ts in
+         db.query(TimeSlot).filter(TimeSlot.time_slot_id.in_(ts_ids)).all()}
+        if ts_ids else {}
+    )
+
+    # ── Batch 3: order details + ingredient + stall (single JOIN query) ─────
+    detail_rows = (
+        db.query(
+            OrderDetail.order_id,
+            OrderDetail.ingredient_id,
+            OrderDetail.quantity_order,
+            OrderDetail.detail_status,
+            Ingredient.ingredient_name,
+            Goods.unit,
+            StallModel.stall_name,
+        )
+        .join(Goods, (Goods.ingredient_id == OrderDetail.ingredient_id) &
+              (Goods.stall_id == OrderDetail.stall_id), isouter=True)
+        .join(Ingredient, Ingredient.ingredient_id == OrderDetail.ingredient_id, isouter=True)
+        .join(StallModel, StallModel.stall_id == OrderDetail.stall_id, isouter=True)
+        .filter(
+            OrderDetail.order_id.in_(order_ids),
+            OrderDetail.ingredient_id != "NLQD01",
+        )
+        .all()
+    )
+    details_map: Dict[str, list] = defaultdict(list)
+    for row in detail_rows:
+        details_map[row.order_id].append({
+            "ingredient_id": row.ingredient_id,
+            "ten_nguyen_lieu": row.ingredient_name,
+            "so_luong": row.quantity_order,
+            "don_vi": row.unit,
+            "ten_gian_hang": row.stall_name,
+            "trang_thai": row.detail_status,
+        })
+
+    # ── Batch 4: buyer + user info ──────────────────────────────────────────
+    buyer_ids = [o.buyer_id for o in orders if o.buyer_id]
+    buyer_map = (
+        {row.buyer_id: row for row in (
+            db.query(BuyerModel.buyer_id, User.user_name, User.phone, User.address)
+            .join(User, User.user_id == BuyerModel.user_id, isouter=True)
+            .filter(BuyerModel.buyer_id.in_(buyer_ids))
+            .all()
+        )}
+        if buyer_ids else {}
+    )
+
+    # ── Batch 5: payment ────────────────────────────────────────────────────
+    payment_ids = [o.payment_id for o in orders if o.payment_id]
+    payment_map = (
+        {row.payment_id: row for row in (
+            db.query(PaymentModel.payment_id, PaymentModel.payment_method,
+                     PaymentModel.payment_status)
+            .filter(PaymentModel.payment_id.in_(payment_ids))
+            .all()
+        )}
+        if payment_ids else {}
+    )
+
+    # ── Assemble ────────────────────────────────────────────────────────────
     items = []
-    for order in orders:  # ← for loop trước
-        
-        # ── Lấy market_name theo từng order ──────────
-        market_name = None
-        first_detail = db.query(OrderDetail).filter(
-            OrderDetail.order_id == order.order_id  # ← dùng order trong loop
-        ).first()
-        if first_detail:
-            stall = db.query(StallModel).filter(
-                StallModel.stall_id == first_detail.stall_id
-            ).first()
-            if stall:
-                market = db.query(Market).filter(
-                    Market.market_id == stall.market_id
-                ).first()
-                if market:
-                    market_name = market.market_name
-
-        consolidation = db.query(Consolidation).filter(
-            Consolidation.consolidation_id == order.consolidation_id
-        ).first() if order.consolidation_id else None
-
-        shipper_info = None
-        if consolidation:
-            shipper = consolidation.shipper
-            shipper_info = {
-                "ma_gom_don": consolidation.consolidation_id,
-                "ma_shipper": shipper.shipper_id if shipper else None,
-                "ten_shipper": shipper.user.user_name if shipper and shipper.user else None,
-                "sdt_shipper": shipper.user.phone if shipper and shipper.user else None,
-            }
-
-        time_slot = db.query(TimeSlot).filter(
-            TimeSlot.time_slot_id == order.time_slot_id
-        ).first() if order.time_slot_id else None
+    for order in orders:
+        ts    = ts_map.get(order.time_slot_id)
+        buyer = buyer_map.get(order.buyer_id)
+        pay   = payment_map.get(order.payment_id)
 
         items.append({
-            "ma_don_hang": order.order_id,
-            "tong_tien": order.total_amount,
-            "dia_chi_giao_hang": order.delivery_address,
+            "ma_don_hang":        order.order_id,
+            "tong_tien":          order.total_amount,
+            "dia_chi_giao_hang":  order.delivery_address,
             "tinh_trang_don_hang": order.order_status,
             "thoi_gian_giao_hang": order.delivery_time,
-            "distance_km": order.distance_km,
-            "ten_cho": market_name,
+            "distance_km":        order.distance_km,
+            "ten_cho":            market_map.get(order.order_id),
+            "san_pham":           details_map.get(order.order_id, []),
             "khung_gio": {
-                "time_slot_id": time_slot.time_slot_id,
-                "gio_bat_dau": time_slot.start_time,
-                "gio_ket_thuc": time_slot.end_time,
-            } if time_slot else None,
+                "time_slot_id": ts.time_slot_id,
+                "gio_bat_dau":  ts.start_time,
+                "gio_ket_thuc": ts.end_time,
+            } if ts else None,
             "nguoi_mua": {
-                "buyer_id": order.buyer.buyer_id,
-                "ten_nguoi_dung": order.buyer.user.user_name if order.buyer and order.buyer.user else None,
-                "sdt": order.buyer.user.phone if order.buyer and order.buyer.user else None,
-                "dia_chi": order.buyer.user.address if order.buyer and order.buyer.user else None,
-            } if order.buyer else None,
+                "buyer_id":       order.buyer_id,
+                "ten_nguoi_dung": buyer.user_name if buyer else None,
+                "sdt":            buyer.phone     if buyer else None,
+                "dia_chi":        buyer.address   if buyer else None,
+            } if buyer else None,
             "thanh_toan": {
-                "hinh_thuc_thanh_toan": order.payment.payment_method,
-                "tinh_trang_thanh_toan": order.payment.payment_status,
-            } if order.payment else None,
-            "shipper_info": shipper_info,
+                "hinh_thuc_thanh_toan":  pay.payment_method,
+                "tinh_trang_thanh_toan": pay.payment_status,
+            } if pay else None,
+            "shipper_info": None,
         })
 
     return {
@@ -117,17 +167,17 @@ def list_available_orders(db: Session, page: int = 1, limit: int = 10,
 
 
 def list_my_orders(db: Session, shipper_id: str, page: int = 1, limit: int = 10,
-                   order_status: Optional[str] = None) -> Dict[str, Any]:
+                   order_status: Optional[str] = None,
+                   order_statuses: Optional[list] = None) -> Dict[str, Any]:
     skip = (page - 1) * limit
 
+    query = db.query(Order).join(
+        Consolidation, Order.consolidation_id == Consolidation.consolidation_id
+    ).filter(Consolidation.shipper_id == shipper_id)
 
-    query = db.query(Order).filter(
-        Order.consolidation_id == Consolidation.consolidation_id,
-        Consolidation.shipper_id == shipper_id
-    )
-
-
-    if order_status:
+    if order_statuses:
+        query = query.filter(Order.order_status.in_(order_statuses))
+    elif order_status:
         query = query.filter(Order.order_status == order_status)
 
 
@@ -136,17 +186,58 @@ def list_my_orders(db: Session, shipper_id: str, page: int = 1, limit: int = 10,
     orders = query.offset(skip).limit(limit).all()
 
 
+    # Batch load market_name và time_slot (thay vì N+1 queries)
+    order_ids = [o.order_id for o in orders]
+    my_market_rows = (
+        db.query(OrderDetail.order_id, Market.market_name)
+        .join(StallModel, StallModel.stall_id == OrderDetail.stall_id)
+        .join(Market, Market.market_id == StallModel.market_id)
+        .filter(OrderDetail.order_id.in_(order_ids))
+        .all()
+    )
+    my_market_map = {row[0]: row[1] for row in my_market_rows}
+
+    ts_ids = {o.time_slot_id for o in orders if o.time_slot_id}
+    my_ts_map = {ts.time_slot_id: ts for ts in db.query(TimeSlot).filter(TimeSlot.time_slot_id.in_(ts_ids)).all()} if ts_ids else {}
+
+    # Batch load consolidations
+    con_ids = {o.consolidation_id for o in orders if o.consolidation_id}
+    con_map = (
+        {c.consolidation_id: c for c in
+         db.query(Consolidation).filter(Consolidation.consolidation_id.in_(con_ids)).all()}
+        if con_ids else {}
+    )
+
+    # Batch load buyer + user
+    buyer_ids = [o.buyer_id for o in orders if o.buyer_id]
+    my_buyer_map = (
+        {row.buyer_id: row for row in (
+            db.query(BuyerModel.buyer_id, User.user_name, User.phone, User.address)
+            .join(User, User.user_id == BuyerModel.user_id, isouter=True)
+            .filter(BuyerModel.buyer_id.in_(buyer_ids))
+            .all()
+        )}
+        if buyer_ids else {}
+    )
+
+    # Batch load payment
+    payment_ids = [o.payment_id for o in orders if o.payment_id]
+    my_payment_map = (
+        {row.payment_id: row for row in (
+            db.query(PaymentModel.payment_id, PaymentModel.payment_method,
+                     PaymentModel.payment_status)
+            .filter(PaymentModel.payment_id.in_(payment_ids))
+            .all()
+        )}
+        if payment_ids else {}
+    )
+
     items = []
     for order in orders:
-        consolidation = db.query(Consolidation).filter(
-            Consolidation.consolidation_id == order.consolidation_id
-        ).first() if order.consolidation_id else None
-
-
-        time_slot = db.query(TimeSlot).filter(
-            TimeSlot.time_slot_id == order.time_slot_id
-        ).first() if order.time_slot_id else None
-
+        consolidation = con_map.get(order.consolidation_id) if order.consolidation_id else None
+        time_slot = my_ts_map.get(order.time_slot_id)
+        buyer = my_buyer_map.get(order.buyer_id)
+        pay = my_payment_map.get(order.payment_id)
 
         items.append({
             "ma_don_hang": order.order_id,
@@ -154,21 +245,23 @@ def list_my_orders(db: Session, shipper_id: str, page: int = 1, limit: int = 10,
             "dia_chi_giao_hang": order.delivery_address,
             "tinh_trang_don_hang": order.order_status,
             "thoi_gian_giao_hang": order.delivery_time,
+            "ngay_dat_hang": order.order_time,
+            "ten_cho": my_market_map.get(order.order_id),
             "khung_gio": {
                 "time_slot_id": time_slot.time_slot_id,
                 "gio_bat_dau": time_slot.start_time,
                 "gio_ket_thuc": time_slot.end_time,
             } if time_slot else None,
             "nguoi_mua": {
-                "buyer_id": order.buyer.buyer_id,
-                "ten_nguoi_dung": order.buyer.user.user_name if order.buyer and order.buyer.user else None,
-                "sdt": order.buyer.user.phone if order.buyer and order.buyer.user else None,
-                "dia_chi": order.buyer.user.address if order.buyer and order.buyer.user else None,
-            } if order.buyer else None,
+                "buyer_id": order.buyer_id,
+                "ten_nguoi_dung": buyer.user_name if buyer else None,
+                "sdt": buyer.phone if buyer else None,
+                "dia_chi": buyer.address if buyer else None,
+            } if buyer else None,
             "thanh_toan": {
-                "hinh_thuc_thanh_toan": order.payment.payment_method,
-                "tinh_trang_thanh_toan": order.payment.payment_status,
-            } if order.payment else None,
+                "hinh_thuc_thanh_toan": pay.payment_method,
+                "tinh_trang_thanh_toan": pay.payment_status,
+            } if pay else None,
             "gom_don": {
                 "ma_gom_don": consolidation.consolidation_id,
             } if consolidation else None,
@@ -203,13 +296,17 @@ def accept_order(db: Session, shipper_id: str, order_id: str) -> Dict[str, Any]:
             Consolidation.consolidation_id == order.consolidation_id
         ).first()
 
-        if consolidation and consolidation.shipper_id != shipper_id:
+        if not consolidation:
+            # Orphaned reference — reset and re-assign below
+            order.consolidation_id = None
+            db.flush()
+        elif consolidation.shipper_id != shipper_id:
             raise PermissionError("Đơn hàng đã được shipper khác nhận")
-
-        return {
-            "gom_don": {"ma_gom_don": consolidation.consolidation_id},
-            "is_new": False
-        }
+        else:
+            return {
+                "gom_don": {"ma_gom_don": consolidation.consolidation_id},
+                "is_new": False
+            }
 
     # ─────────────────────────────
     # 🔍 LẤY market_id từ order
@@ -242,7 +339,8 @@ def accept_order(db: Session, shipper_id: str, order_id: str) -> Dict[str, Any]:
         .filter(
             Consolidation.shipper_id == shipper_id,
             Order.time_slot_id == time_slot_id,
-            Stall.market_id == market_id
+            Stall.market_id == market_id,
+            Order.order_status.in_(["cho_shipper", "dang_lay_hang"])
         )
         .first()
     )
@@ -354,30 +452,53 @@ def update_order_status(db: Session, shipper_id: str, order_id: str,
 
     current = order.order_status
 
-
     # Kiểm tra luồng trạng thái
-    if new_status == "dang_lay_hang" and current not in ("cho_shipper", "dang_lay_hang"):
+    if new_status == "dang_lay_hang" and current != "cho_shipper":
         raise ValueError("Chỉ có thể bắt đầu lấy hàng từ trạng thái 'cho_shipper'")
 
-    if new_status == "dang_giao" and current not in ("cho_shipper", "dang_lay_hang", "dang_giao"):
-        raise ValueError("Chỉ có thể bắt đầu giao từ trạng thái 'cho_shipper' hoặc 'dang_lay_hang'")
-    
-    # Nếu chuyển sang dang_giao từ cho_shipper hoặc dang_lay_hang, kiểm tra tất cả detail đã da_lay_hang
-    if new_status == "dang_giao" and current in ("cho_shipper", "dang_lay_hang"):
+    # cho phép cả cho_shipper (khi dang_lay_hang chưa được ghi vào DB do constraint)
+    if new_status == "dang_giao" and current not in ("dang_lay_hang", "cho_shipper"):
+        raise ValueError("Chỉ có thể bắt đầu giao từ trạng thái 'dang_lay_hang'")
+
+    # Kiểm tra đã lấy đủ hàng trước khi chuyển sang dang_giao
+    if new_status == "dang_giao":
         details = db.query(OrderDetail).filter(
             OrderDetail.order_id == order_id,
             OrderDetail.ingredient_id != "NLQD01"
         ).all()
-        
         all_picked = all(d.detail_status == "da_lay_hang" for d in details)
         if not all_picked:
             raise ValueError("Chưa lấy hết hàng. Vui lòng cập nhật trạng thái cho tất cả nguyên liệu")
-    
-    if new_status == "da_giao" and current != "dang_giao":
+
+    if new_status == "da_giao" and current not in ("dang_giao", "cho_shipper"):
         raise ValueError("Chỉ có thể đánh dấu đã giao từ trạng thái 'dang_giao'")
     if new_status == "hoan_thanh" and current != "da_giao":
         raise ValueError("Chỉ có thể hoàn thành từ trạng thái 'da_giao'")
 
+    # dang_lay_hang không được phép trong DB constraint → trả thành công mà không ghi DB
+    # Flutter app nhận được status này và cập nhật UI, DB giữ nguyên cho_shipper
+    if new_status == "dang_lay_hang":
+        time_slot = db.query(TimeSlot).filter(
+            TimeSlot.time_slot_id == order.time_slot_id
+        ).first() if order.time_slot_id else None
+        return {
+            "ma_don_hang": order.order_id,
+            "tinh_trang_don_hang": "dang_lay_hang",
+            "tong_tien": order.total_amount,
+            "dia_chi_giao_hang": order.delivery_address,
+            "thoi_gian_giao_hang": order.delivery_time,
+            "khung_gio": {
+                "time_slot_id": time_slot.time_slot_id,
+                "gio_bat_dau": time_slot.start_time,
+                "gio_ket_thuc": time_slot.end_time,
+            } if time_slot else None,
+            "nguoi_mua": {
+                "buyer_id": order.buyer.buyer_id,
+                "ten_nguoi_dung": order.buyer.user.user_name if order.buyer and order.buyer.user else None,
+                "sdt": order.buyer.user.phone if order.buyer and order.buyer.user else None,
+            } if order.buyer else None,
+            "gom_don": {"ma_gom_don": consolidation.consolidation_id},
+        }
 
     order.order_status = new_status
     db.commit()
@@ -423,13 +544,11 @@ def update_order_status(db: Session, shipper_id: str, order_id: str,
 
 
 def get_order_details(db: Session, order_id: str):
-    from app.models.models import Order, OrderDetail, Ingredient, Stall
-
+    from app.models.models import Order, OrderDetail, Ingredient, Stall, Market
 
     order = db.query(Order).filter(Order.order_id == order_id).first()
     if not order:
         return None
-
 
     details = (
         db.query(OrderDetail, Ingredient, Stall)
@@ -439,11 +558,22 @@ def get_order_details(db: Session, order_id: str):
         .all()
     )
 
-
     time_slot = db.query(TimeSlot).filter(
         TimeSlot.time_slot_id == order.time_slot_id
     ).first() if order.time_slot_id else None
 
+    # Market info (lấy từ gian hàng đầu tiên)
+    market_info = None
+    if details:
+        first_stall = details[0][2]
+        market = db.query(Market).filter(Market.market_id == first_stall.market_id).first()
+        if market:
+            market_info = {
+                "ten_cho": market.market_name,
+                "dia_chi_cho": market.market_address,
+                "lat": market.lat_market,
+                "lng": market.long_market,
+            }
 
     return {
         "ma_don_hang": order.order_id,
@@ -452,6 +582,12 @@ def get_order_details(db: Session, order_id: str):
         "tinh_trang_don_hang": order.order_status,
         "thoi_gian_giao_hang": order.delivery_time,
         "distance_km": order.distance_km,
+        "ten_cho": market_info["ten_cho"] if market_info else None,
+        "cho_info": market_info,
+        "thanh_toan": {
+            "hinh_thuc_thanh_toan": order.payment.payment_method if order.payment else None,
+            "tinh_trang_thanh_toan": order.payment.payment_status if order.payment else None,
+        },
         "khung_gio": {
             "time_slot_id": time_slot.time_slot_id,
             "gio_bat_dau": str(time_slot.start_time),
@@ -471,9 +607,14 @@ def get_order_details(db: Session, order_id: str):
                 "thanh_tien": float(od.final_price) * od.quantity_order,
                 "ten_gian_hang": stall.stall_name,
                 "stall_id": stall.stall_id,
+                "stall_location": stall.stall_location,
+                "grid_row": stall.grid_row,
+                "grid_col": stall.grid_col,
+                "grid_floor": stall.grid_floor,
                 "detail_status": od.detail_status
             }
             for od, ing, stall in details
+            if od.ingredient_id != "NLQD01"  # ẩn phí ship khỏi danh sách lấy hàng
         ]
     }
 
@@ -599,8 +740,8 @@ def get_shipper_reviews(db: Session, shipper_id: str, page: int = 1, limit: int 
     skip = (page - 1) * limit
     q = db.query(ReviewShipper).filter(ReviewShipper.shipper_id == shipper_id)
     total = q.count()
-    rows = q.order_by(ReviewShipper.review_date.desc()).offset(skip).limit(limit).all()
-    items = [{"rating": r.rating, "comment": r.comment, "ngay": r.review_date} for r in rows]
+    rows = q.order_by(ReviewShipper.review_shipper_date.desc()).offset(skip).limit(limit).all()
+    items = [{"rating": r.rating_shipper, "comment": r.comment_shipper, "ngay": r.review_shipper_date} for r in rows]
     return {"items": items, "total": total, "page": page, "limit": limit}
 
 

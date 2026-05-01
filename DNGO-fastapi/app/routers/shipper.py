@@ -6,6 +6,70 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.middlewares.auth import allow, AuthUser
 from app.repositories import shipper as shipper_repo
+import logging as _log
+_logger = _log.getLogger(__name__)
+
+
+def _fill_missing_distances(db: Session, items: list) -> None:
+    """Tính distance_km cho các đơn null ngay trong request, cập nhật DB và items[]."""
+    from app.models.models import Order, OrderDetail, Stall, Market
+    from app.utils.distance import calculate_distance
+
+    null_items = [o for o in items if o.get("distance_km") is None]
+    if not null_items:
+        return
+
+    null_ids = [o["ma_don_hang"] for o in null_items]
+
+    # Batch-load market addresses keyed by order_id
+    rows = (
+        db.query(OrderDetail.order_id, Market.market_address)
+        .join(Stall, Stall.stall_id == OrderDetail.stall_id)
+        .join(Market, Market.market_id == Stall.market_id)
+        .filter(OrderDetail.order_id.in_(null_ids))
+        .distinct()
+        .all()
+    )
+    market_addr_map = {r.order_id: r.market_address for r in rows}
+
+    # Geocode with deduplication: (market_addr, delivery_addr) → distance
+    distance_cache: dict = {}
+    order_distance: dict = {}
+
+    for item in null_items:
+        oid = item["ma_don_hang"]
+        market_addr = market_addr_map.get(oid)
+        delivery_addr = item.get("dia_chi_giao_hang", "")
+        if not market_addr or not delivery_addr:
+            continue
+        cache_key = (market_addr, delivery_addr)
+        if cache_key not in distance_cache:
+            try:
+                distance_cache[cache_key] = calculate_distance(market_addr, delivery_addr)
+            except Exception as e:
+                _logger.warning(f"[fill_distances] {oid}: {e}")
+                distance_cache[cache_key] = None
+        dist = distance_cache[cache_key]
+        if dist is not None:
+            order_distance[oid] = dist
+
+    if not order_distance:
+        return
+
+    # Update items in-place
+    for item in items:
+        if item["ma_don_hang"] in order_distance:
+            item["distance_km"] = round(order_distance[item["ma_don_hang"]], 2)
+
+    # Persist to DB
+    db.query(Order).filter(Order.order_id.in_(list(order_distance.keys()))).all()
+    for order in db.query(Order).filter(Order.order_id.in_(list(order_distance.keys()))).all():
+        order.distance_km = order_distance[order.order_id]
+    try:
+        db.commit()
+    except Exception as e:
+        _logger.error(f"[fill_distances] commit error: {e}")
+        db.rollback()
 
 router = APIRouter(prefix="/api/shipper", tags=["shipper"])
 
@@ -82,11 +146,12 @@ def list_available_orders(
     limit: int = Query(10, ge=1, le=100),
     tinh_trang_don_hang: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user: AuthUser = Depends(allow("shipper"))
+    current_user: AuthUser = Depends(allow("shipper")),
 ):
     result = shipper_repo.list_available_orders(
         db=db, page=page, limit=limit, order_status=tinh_trang_don_hang
     )
+    _fill_missing_distances(db, result["items"])
     return {"success": True, **result}
 
 
@@ -99,9 +164,13 @@ def list_my_orders(
     current_user: AuthUser = Depends(allow("shipper"))
 ):
     shipper = get_shipper_or_404(db, current_user.user_id)
+    # Hỗ trợ filter nhiều status: "cho_shipper,dang_giao,dang_lay_hang"
+    statuses = [s.strip() for s in tinh_trang_don_hang.split(",")] if tinh_trang_don_hang and "," in tinh_trang_don_hang else None
     result = shipper_repo.list_my_orders(
         db=db, shipper_id=shipper.shipper_id,
-        page=page, limit=limit, order_status=tinh_trang_don_hang
+        page=page, limit=limit,
+        order_status=tinh_trang_don_hang if not statuses else None,
+        order_statuses=statuses
     )
     return {"success": True, **result}
 
@@ -233,9 +302,17 @@ def optimize_route(
     first_detail = db.query(OrderDetail).filter(
         OrderDetail.order_id == orders[0].order_id
     ).first()
+    if not first_detail:
+        raise HTTPException(400, "Đơn hàng không có chi tiết nguyên liệu")
 
     stall = db.query(Stall).filter(Stall.stall_id == first_detail.stall_id).first()
+    if not stall:
+        raise HTTPException(400, "Không tìm thấy gian hàng")
+
     market = db.query(Market).filter(Market.market_id == stall.market_id).first()
+    if not market:
+        raise HTTPException(400, "Không tìm thấy chợ")
+
     market_address = market.market_address
 
     # Lấy địa chỉ giao hàng của từng đơn

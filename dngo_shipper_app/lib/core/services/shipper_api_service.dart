@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ShipperApiService {
   final Dio _dio;
-  final String _baseUrl = 'http://207.180.233.84:8000';
+  final String _baseUrl = 'http://192.168.1.155:8002';
 
   ShipperApiService() : _dio = Dio() {
     _dio.options.baseUrl = _baseUrl;
@@ -34,12 +34,7 @@ class ShipperApiService {
       }
       throw Exception('Failed to load available orders');
     } catch (e) {
-      // Mock data so UI can be displayed during testing
-      return [
-        ShipperOrder(maDonHang: 'DNGO-1090', date: 'Bây giờ', totalAmount: 45000, deliveryAddress: '123 Nguyễn Huệ, Quận 1', status: 'pending'),
-        ShipperOrder(maDonHang: 'DNGO-9932', date: '5 phút trước', totalAmount: 120000, deliveryAddress: '89 Lê Lợi, Phường Bến Thành', status: 'pending'),
-        ShipperOrder(maDonHang: 'DNGO-8844', date: '10 phút trước', totalAmount: 34000, deliveryAddress: '10/2 Pasteur, Quận 3', status: 'pending'),
-      ];
+      throw Exception('Không thể tải danh sách đơn: $e');
     }
   }
 
@@ -108,7 +103,7 @@ class ShipperApiService {
     try {
       final response = await _dio.get('/api/shipper/me');
       if (response.statusCode == 200) {
-        return response.data['user']; // API test output showed 'user'
+        return response.data['shipper'];
       }
       return null;
     } catch (e) {
@@ -149,8 +144,8 @@ class ShipperApiService {
 
   Future<bool> updateOrderStatus(String orderId, String status) async {
     try {
-      final response = await _dio.put('/api/shipper/orders/$orderId/status', data: {
-        'status': status
+      final response = await _dio.patch('/api/shipper/orders/$orderId/status', data: {
+        'tinh_trang_don_hang': status
       });
       return response.statusCode == 200;
     } catch (e) {

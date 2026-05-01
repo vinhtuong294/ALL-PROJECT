@@ -272,42 +272,94 @@ def _mark_paid(db: Session, payment_id: str, vnp_data: dict) -> str:
     """
     Đánh dấu thanh toán thành công, cập nhật payment + order + trừ tồn kho.
     Trả về order_id.
+
+    Bảo mật:
+    - with_for_update() khoá dòng Payment → ngăn race condition IPN/Return
+    - Kiểm tra vnp_Amount khớp total đơn hàng → ngăn hack giảm giá
     """
     import re
     from datetime import datetime
 
-    # Lấy order_id từ vnp_OrderInfo nếu có
-    order_id = None
-    info = str(vnp_data.get("vnp_OrderInfo", "")).strip()
-    m = re.search(r"don\s+([A-Z0-9_-]+)", info, re.I)
-    if m:
-        order_id = m.group(1)
-
+    # ── 1. Lock payment row ngay lập tức (ngăn race condition IPN vs Return) ──
     payment = db.execute(
-        select(Payment).where(Payment.payment_id == payment_id)
+        select(Payment)
+        .where(Payment.payment_id == payment_id)
+        .with_for_update()          # request thứ 2 sẽ block tại đây cho đến khi request 1 commit
     ).scalar_one_or_none()
 
+    # Lấy order_id từ payment hoặc fallback từ vnp_OrderInfo
+    order_id = None
     if payment and payment.orders:
         order_id = payment.orders[0].order_id
 
     if not order_id:
+        info = str(vnp_data.get("vnp_OrderInfo", "")).strip()
+        m = re.search(r"don\s+([A-Z0-9_-]+)", info, re.I)
+        if m:
+            order_id = m.group(1)
+
+    if not order_id:
         raise Exception(f"ORDER_ID_NOT_FOUND for payment {payment_id}")
 
-    # Idempotent
+    # ── 2. Idempotency — request thứ 2 thoát ra sớm sau khi unlock ──
     if payment and payment.payment_status == PaymentStatus.da_thanh_toan.value:
         return order_id
 
-    # Lưu thông tin ngân hàng
-    tx_no = str(vnp_data.get("vnp_TransactionNo", ""))
-    bank_no = str(vnp_data.get("vnp_BankTranNo", ""))
-    bank_code = str(vnp_data.get("vnp_BankCode", ""))
-    tag = "#".join(x for x in [bank_code, f"TXN={tx_no}" if tx_no else "", f"BANK={bank_no}" if bank_no else ""] if x)[:64]
+    # ── 3. Tính tổng tiền đơn hàng (pass 1 — chưa có side effect) ──
+    order = db.execute(
+        select(Order).where(Order.order_id == order_id)
+    ).scalar_one()
+
+    items = db.execute(
+        select(OrderDetail).where(OrderDetail.order_id == order_id)
+    ).scalars().all()
+
+    total = 0.0
+    for it in items:
+        try:
+            total += float(it.final_price or 0) * int(it.quantity_order or 0)
+        except Exception:
+            pass
+
+    # ── 4. P0 Security: kiểm tra số tiền VNPay thực thu có khớp không ──
+    vnp_amount_paid = float(vnp_data.get("vnp_Amount", 0)) / 100
+    if abs(total - vnp_amount_paid) > 1:          # cho phép sai số 1 VNĐ do làm tròn
+        raise ValueError(
+            f"AMOUNT_MISMATCH: đơn {order_id} cần {total:.0f} VNĐ, "
+            f"VNPay thu {vnp_amount_paid:.0f} VNĐ"
+        )
+
+    # ── 5. Trừ tồn kho (pass 2 — chỉ chạy khi amount đã xác nhận hợp lệ) ──
+    for it in items:
+        try:
+            qty = int(it.quantity_order or 0)
+            goods = db.execute(
+                select(Goods).where(
+                    Goods.ingredient_id == it.ingredient_id,
+                    Goods.stall_id == it.stall_id,
+                )
+            ).scalar_one_or_none()
+            if goods and goods.update_date:
+                order_date = order.order_time or datetime.utcnow()
+                if order_date >= goods.update_date:
+                    goods.inventory = max((goods.inventory or 0) - qty, 0)
+        except Exception as e:
+            print("[MARK_PAID ITEM ERROR]", e)
+
+    # ── 6. Lưu thông tin ngân hàng & cập nhật payment ──
+    tx_no    = str(vnp_data.get("vnp_TransactionNo", ""))
+    bank_no  = str(vnp_data.get("vnp_BankTranNo", ""))
+    bank_code= str(vnp_data.get("vnp_BankCode", ""))
+    tag = "#".join(
+        x for x in [bank_code, f"TXN={tx_no}" if tx_no else "", f"BANK={bank_no}" if bank_no else ""]
+        if x
+    )[:64]
 
     pay_time = datetime.utcnow()
     vnp_pay_date = vnp_data.get("vnp_PayDate")
     if vnp_pay_date and len(vnp_pay_date) == 14:
         pay_time = datetime(
-            int(vnp_pay_date[0:4]), int(vnp_pay_date[4:6]), int(vnp_pay_date[6:8]),
+            int(vnp_pay_date[0:4]), int(vnp_pay_date[4:6]),  int(vnp_pay_date[6:8]),
             int(vnp_pay_date[8:10]), int(vnp_pay_date[10:12]), int(vnp_pay_date[12:14])
         )
 
@@ -322,44 +374,13 @@ def _mark_paid(db: Session, payment_id: str, vnp_data: dict) -> str:
         db.add(payment)
     else:
         payment.payment_account = tag
-        payment.payment_time = pay_time
-        payment.payment_status = PaymentStatus.da_thanh_toan.value
+        payment.payment_time    = pay_time
+        payment.payment_status  = PaymentStatus.da_thanh_toan.value
 
-    # Lấy order
-    order = db.execute(
-        select(Order).where(Order.order_id == order_id)
-    ).scalar_one()
-
-    # Tính tổng tiền + trừ kho
-    items = db.execute(
-        select(OrderDetail).where(OrderDetail.order_id == order_id)
-    ).scalars().all()
-
-    total = 0
-    for it in items:
-        try:
-            unit_price = float(it.final_price or 0)
-            qty = int(it.quantity_order or 0)
-            total += unit_price * qty
-
-            goods = db.execute(
-                select(Goods).where(
-                    Goods.ingredient_id == it.ingredient_id,
-                    Goods.stall_id == it.stall_id,
-                )
-            ).scalar_one_or_none()
-
-            if goods and goods.update_date:
-                order_date = order.order_time or datetime.utcnow()
-                if order_date >= goods.update_date:
-                    goods.inventory = max((goods.inventory or 0) - qty, 0)
-        except Exception as e:
-            print("[MARK_PAID ITEM ERROR]", e)
-
-    # Cập nhật order
+    # ── 7. Cập nhật order ──
     order.order_status = OrderStatus.da_xac_nhan.value
     order.total_amount = total
-    order.payment_id = payment_id
+    order.payment_id   = payment_id
 
     return order_id
 

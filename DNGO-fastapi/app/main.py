@@ -1,3 +1,9 @@
+from dotenv import load_dotenv
+import pathlib as _pathlib
+# Load .env from the project root (DNGO-fastapi/) regardless of CWD — needed when uvicorn --reload respawns the server process
+_env_path = _pathlib.Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,8 +16,6 @@ import os
 import random, string
 
 from app.config import settings
-from dotenv import load_dotenv
-load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -42,11 +46,12 @@ async def lifespan(app: FastAPI):
     # Create new tables if not exist
     try:
         from app.database import engine, Base
-        from app.models.models import DeliveryProof, FailedDeliveryReport, WithdrawalRequest
+        from app.models.models import DeliveryProof, FailedDeliveryReport, WithdrawalRequest, Notification
         Base.metadata.create_all(bind=engine, tables=[
             DeliveryProof.__table__,
             FailedDeliveryReport.__table__,
             WithdrawalRequest.__table__,
+            Notification.__table__,
         ], checkfirst=True)
         logger.info("✅ Tables checked/created")
     except Exception as e:
@@ -54,7 +59,8 @@ async def lifespan(app: FastAPI):
 
     # Create platform wallet
     from app.database import SessionLocal
-    from app.models.models import Wallet
+    from app.models.models import Wallet, TimeSlot
+    from datetime import time as dtime
 
     db = SessionLocal()
     try:
@@ -73,6 +79,48 @@ async def lifespan(app: FastAPI):
             logger.info(f"✅ Created platform wallet: {wallet_id}")
         else:
             logger.info(f"✅ Platform wallet exists: {existing.wallet_id}")
+    finally:
+        db.close()
+
+    # Seed time slots KG01–KG21
+    _TIME_SLOTS = [
+        ("KG01", dtime(6, 30),  dtime(7, 0)),
+        ("KG02", dtime(7, 0),   dtime(7, 30)),
+        ("KG03", dtime(7, 30),  dtime(8, 0)),
+        ("KG04", dtime(8, 0),   dtime(8, 30)),
+        ("KG05", dtime(8, 30),  dtime(9, 0)),
+        ("KG06", dtime(9, 0),   dtime(9, 30)),
+        ("KG07", dtime(9, 30),  dtime(10, 0)),
+        ("KG08", dtime(10, 0),  dtime(10, 30)),
+        ("KG09", dtime(10, 30), dtime(11, 0)),
+        ("KG10", dtime(11, 0),  dtime(11, 30)),
+        ("KG11", dtime(11, 30), dtime(12, 0)),
+        ("KG12", dtime(12, 0),  dtime(12, 30)),
+        ("KG13", dtime(14, 30), dtime(15, 0)),
+        ("KG14", dtime(15, 0),  dtime(15, 30)),
+        ("KG15", dtime(15, 30), dtime(16, 0)),
+        ("KG16", dtime(16, 0),  dtime(16, 30)),
+        ("KG17", dtime(16, 30), dtime(17, 0)),
+        ("KG18", dtime(17, 0),  dtime(17, 30)),
+        ("KG19", dtime(17, 30), dtime(18, 0)),
+        ("KG20", dtime(18, 0),  dtime(18, 30)),
+        ("KG21", dtime(18, 30), dtime(19, 0)),
+    ]
+    db = SessionLocal()
+    try:
+        existing_ids = {ts.time_slot_id for ts in db.query(TimeSlot.time_slot_id).all()}
+        added = 0
+        for slot_id, start, end in _TIME_SLOTS:
+            if slot_id not in existing_ids:
+                db.add(TimeSlot(time_slot_id=slot_id, start_time=start, end_time=end))
+                added += 1
+        if added:
+            db.commit()
+            logger.info(f"✅ Seeded {added} time slots")
+        else:
+            logger.info("✅ Time slots already seeded")
+    except Exception as e:
+        logger.warning(f"⚠️ Time slot seed failed: {e}")
     finally:
         db.close()
 

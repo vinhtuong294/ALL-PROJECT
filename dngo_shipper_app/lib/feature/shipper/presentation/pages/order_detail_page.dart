@@ -1,14 +1,17 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/location_tracking_service.dart';
 import '../../../../core/utils/helpers.dart';
+import 'chat_with_seller_page.dart';
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -35,6 +38,11 @@ class _OrderDetailPageState extends State<OrderDetailPage>
   bool _loading = true;
   bool _updating = false;
   final Set<String> _pickingUpIds = {};
+  LatLng? _deliveryPos;
+  LatLng? _marketGeoPos;
+  bool _geocodingMap = false;
+
+  static const _marketFallback = LatLng(16.035415, 108.243501);
 
   // ── Animation ──
   late AnimationController _progressController;
@@ -84,9 +92,65 @@ class _OrderDetailPageState extends State<OrderDetailPage>
         });
         _animateProgress();
         _fadeController.forward();
+        _startGeocoding();
       }
     } catch (e) {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _startGeocoding() {
+    final raw = _order?['dia_chi_giao_hang'] ?? '';
+    final addr = AddressHelper.parse(raw);
+    final deliveryAddress = addr.address.isNotEmpty ? addr.address : raw;
+
+    if (deliveryAddress.isEmpty) return;
+
+    // Dùng GPS thực từ API nếu có, không cần geocoding Nominatim
+    final choInfo = _order?['cho_info'] as Map<String, dynamic>?;
+    final marketLat = (choInfo?['lat'] as num?)?.toDouble();
+    final marketLng = (choInfo?['lng'] as num?)?.toDouble();
+
+    setState(() => _geocodingMap = true);
+
+    if (marketLat != null && marketLng != null) {
+      // Market GPS có sẵn → chỉ geocode địa chỉ giao hàng
+      _geocodeAddress(deliveryAddress).then((deliveryPos) {
+        if (!mounted) return;
+        final marketPos = LatLng(marketLat, marketLng);
+        final distKm = _order?['distance_km'] != null
+            ? (_order!['distance_km'] as num).toDouble()
+            : 2.5;
+        setState(() {
+          _marketGeoPos = marketPos;
+          _deliveryPos = deliveryPos ?? LatLng(
+            marketPos.latitude + (distKm * 0.002),
+            marketPos.longitude - (distKm * 0.006),
+          );
+          _geocodingMap = false;
+        });
+      });
+    } else {
+      // Fallback: geocode cả market name
+      final marketName = '${_order?['ten_cho'] ?? 'Chợ Bắc Mỹ An'}, Đà Nẵng';
+      Future.wait([
+        _geocodeAddress(deliveryAddress),
+        _geocodeAddress(marketName),
+      ]).then((results) {
+        if (!mounted) return;
+        final distKm = _order?['distance_km'] != null
+            ? (_order!['distance_km'] as num).toDouble()
+            : 2.5;
+        final marketPos = results[1] ?? _marketFallback;
+        setState(() {
+          _marketGeoPos = marketPos;
+          _deliveryPos = results[0] ?? LatLng(
+            marketPos.latitude + (distKm * 0.002),
+            marketPos.longitude - (distKm * 0.006),
+          );
+          _geocodingMap = false;
+        });
+      });
     }
   }
 
@@ -102,7 +166,9 @@ class _OrderDetailPageState extends State<OrderDetailPage>
   }
 
   List<dynamic> _products() =>
-      (_order?['san_pham'] as List<dynamic>?) ?? [];
+      ((_order?['san_pham'] as List<dynamic>?) ?? [])
+          .where((p) => p['ingredient_id'] != 'NLQD01')
+          .toList();
 
   String get _status => _order?['tinh_trang_don_hang'] ?? '';
 
@@ -164,7 +230,12 @@ class _OrderDetailPageState extends State<OrderDetailPage>
     setState(() => _pickingUpIds.add(id));
     try {
       await ApiService.updateOrderItemPickup(widget.orderId, id);
-      await _loadDetail(); // reload để đồng bộ detail_status từ server
+      final wasPickingUp = _status == 'dang_lay_hang';
+      await _loadDetail();
+      // DB luôn trả cho_shipper (không lưu dang_lay_hang) → giữ local state
+      if (wasPickingUp && mounted && _status == 'cho_shipper') {
+        setState(() => _order = {..._order!, 'tinh_trang_don_hang': 'dang_lay_hang'});
+      }
     } catch (e) {
       if (mounted) _showSnack(e.toString().replaceFirst('Exception: ', ''), isError: true);
     } finally {
@@ -194,6 +265,16 @@ class _OrderDetailPageState extends State<OrderDetailPage>
       return;
     }
 
+    // dang_lay_hang không lưu DB → cập nhật local state luôn, không gọi API
+    if (next == 'dang_lay_hang') {
+      setState(() {
+        _order = {..._order!, 'tinh_trang_don_hang': 'dang_lay_hang'};
+      });
+      _animateProgress();
+      _showSnack('Bắt đầu lấy hàng tại chợ! Tích từng mặt hàng khi lấy xong.');
+      return;
+    }
+
     setState(() => _updating = true);
     try {
       debugPrint('📡 [API] updateOrderStatus orderId=${widget.orderId} status=$next');
@@ -204,11 +285,7 @@ class _OrderDetailPageState extends State<OrderDetailPage>
       }
 
       if (mounted) {
-        _showSnack(
-          next == 'dang_lay_hang'
-              ? 'Bắt đầu lấy hàng tại chợ! Tích từng mặt hàng khi lấy xong.'
-              : 'Đang giao hàng đến khách. Chúc chuyến tốt! 🚀',
-        );
+        _showSnack('Đang giao hàng đến khách. Chúc chuyến tốt! 🚀');
         await _loadDetail();
       }
     } catch (e) {
@@ -416,9 +493,17 @@ class _OrderDetailPageState extends State<OrderDetailPage>
                 width: double.infinity,
                 height: 54,
                 child: ElevatedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(ctx);
-                    _completeDelivery(picked?.name, noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim());
+                    String? imageUrl;
+                    if (picked != null && !kIsWeb) {
+                      try {
+                        imageUrl = await ApiService.uploadImage(picked!.path);
+                      } catch (_) {
+                        // upload thất bại → vẫn tiếp tục giao hàng, không có ảnh POD
+                      }
+                    }
+                    _completeDelivery(imageUrl, noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim());
                   },
                   icon: const Icon(Icons.check_circle, color: Colors.white),
                   label: const Text('XÁC NHẬN ĐÃ GIAO',
@@ -588,86 +673,115 @@ class _OrderDetailPageState extends State<OrderDetailPage>
     );
   }
 
-  void _showInAppMap(String address, double distanceKm) {
-    final market = const LatLng(16.035415, 108.243501);
-    final dest = LatLng(16.035415 + distanceKm * 0.002, 108.243501 - distanceKm * 0.006);
+  Future<void> _showMapDialog(String deliveryAddress, double distKm) async {
+    final marketPos = _marketGeoPos ?? _marketFallback;
+
+    final deliveryPos = _deliveryPos ?? LatLng(
+      marketPos.latitude + (distKm * 0.002),
+      marketPos.longitude - (distKm * 0.006),
+    );
+    final center = LatLng(
+      (marketPos.latitude + deliveryPos.latitude) / 2,
+      (marketPos.longitude + deliveryPos.longitude) / 2,
+    );
+
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         clipBehavior: Clip.antiAlias,
         child: SizedBox(
-          width: 500,
+          width: double.infinity,
           height: 480,
           child: Column(children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
               color: _kGreen,
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                const Text('Bản đồ giao hàng',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(ctx),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Bản đồ giao hàng', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('Khoảng cách: ${distKm.toStringAsFixed(1)} km', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ])),
+                IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(ctx), padding: EdgeInsets.zero),
               ]),
             ),
             Expanded(
-              child: FlutterMap(
-                options: MapOptions(initialCenter: market, initialZoom: 13),
-                children: [
-                  TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.dngo.shipper',
-                  ),
-                  MarkerLayer(markers: [
-                    Marker(
-                      point: market, width: 44, height: 44,
-                      child: Container(
-                        decoration: BoxDecoration(
-                            color: _kGreen, shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2.5),
-                            boxShadow: [BoxShadow(color: _kGreen.withValues(alpha: 0.4), blurRadius: 8)]),
-                        child: const Icon(Icons.store, color: Colors.white, size: 20),
-                      ),
+              child: Stack(children: [
+                FlutterMap(
+                  options: MapOptions(initialCenter: center, initialZoom: _deliveryPos != null ? 13 : 12),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.dngo.shipper',
                     ),
-                    Marker(
-                      point: dest, width: 44, height: 44,
-                      child: Container(
-                        decoration: BoxDecoration(
-                            color: Colors.red, shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2.5),
-                            boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.4), blurRadius: 8)]),
-                        child: const Icon(Icons.location_on, color: Colors.white, size: 20),
+                    MarkerLayer(markers: [
+                      Marker(
+                        point: marketPos, width: 40, height: 40,
+                        child: Container(
+                          decoration: BoxDecoration(color: Colors.orange.shade700, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.5)),
+                          child: const Icon(Icons.storefront, color: Colors.white, size: 18),
+                        ),
                       ),
-                    ),
-                  ]),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.white,
-              child: Row(children: [
-                Container(
+                      Marker(
+                        point: deliveryPos, width: 40, height: 40,
+                        child: Container(
+                          decoration: BoxDecoration(color: Colors.red.shade600, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.5)),
+                          child: const Icon(Icons.home, color: Colors.white, size: 18),
+                        ),
+                      ),
+                    ]),
+                  ],
+                ),
+                Positioned(
+                  top: 10, right: 10,
+                  child: Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Colors.blue.shade50, shape: BoxShape.circle),
-                    child: Icon(Icons.route, color: Colors.blue.shade700)),
-                const SizedBox(width: 12),
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Khoảng cách ước tính',
-                      style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  Text('${distanceKm.toStringAsFixed(1)} km',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                ]),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 6)]),
+                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _legendItem(Colors.orange.shade700, 'Chợ lấy hàng'),
+                      const SizedBox(height: 5),
+                      _legendItem(Colors.red.shade600, 'Điểm giao hàng'),
+                      if (_deliveryPos == null) ...[
+                        const SizedBox(height: 5),
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.warning_amber, size: 11, color: Colors.orange.shade600),
+                          const SizedBox(width: 4),
+                          Text('Vị trí ước lượng', style: TextStyle(fontSize: 10, color: Colors.orange.shade600)),
+                        ]),
+                      ],
+                    ]),
+                  ),
+                ),
               ]),
             ),
           ]),
         ),
       ),
     );
+  }
+
+  Widget _legendItem(Color color, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
+    Container(width: 11, height: 11, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+    const SizedBox(width: 6),
+    Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+  ]);
+
+  Future<LatLng?> _geocodeAddress(String address) async {
+    if (address.isEmpty) return null;
+    try {
+      final encoded = Uri.encodeComponent(address);
+      final response = await http.get(
+        Uri.parse('https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=1&countrycodes=vn'),
+        headers: {'User-Agent': 'dngo-shipper-app/1.0'},
+      ).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        if (data.isNotEmpty) {
+          return LatLng(double.parse(data[0]['lat'] as String), double.parse(data[0]['lon'] as String));
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -790,6 +904,11 @@ class _OrderDetailPageState extends State<OrderDetailPage>
 
         const SizedBox(height: 14),
 
+        // ── MAP SECTION ──
+        _buildMapSection(),
+
+        const SizedBox(height: 14),
+
         // ── INGREDIENT LIST ──
         _buildIngredientSection(products),
 
@@ -901,7 +1020,7 @@ class _OrderDetailPageState extends State<OrderDetailPage>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: allDone
-              ? [const Color(0xFF2F8000), const Color(0xFF1B5E20)]
+              ? [const Color(0xFF00B40F), const Color(0xFF34C759)]
               : [const Color(0xFFE65100), const Color(0xFFBF360C)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1029,6 +1148,76 @@ class _OrderDetailPageState extends State<OrderDetailPage>
   // ─────────────────────────────────────────────────────────
   //  CONTACT CARD
   // ─────────────────────────────────────────────────────────
+  Widget _buildMapSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 220,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(children: [
+        if (_geocodingMap || _deliveryPos == null)
+          Container(
+            color: Colors.grey.shade100,
+            child: const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              CircularProgressIndicator(color: _kGreen, strokeWidth: 2.5),
+              SizedBox(height: 10),
+              Text('Đang xác định vị trí...', style: TextStyle(color: Colors.grey, fontSize: 13)),
+            ])),
+          )
+        else
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: LatLng(
+                ((_marketGeoPos ?? _marketFallback).latitude + _deliveryPos!.latitude) / 2,
+                ((_marketGeoPos ?? _marketFallback).longitude + _deliveryPos!.longitude) / 2,
+              ),
+              initialZoom: 13,
+              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.dngo.shipper',
+              ),
+              MarkerLayer(markers: [
+                Marker(
+                  point: _marketGeoPos ?? _marketFallback, width: 40, height: 40,
+                  child: Container(
+                    decoration: BoxDecoration(color: Colors.orange.shade700, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.5)),
+                    child: const Icon(Icons.storefront, color: Colors.white, size: 18),
+                  ),
+                ),
+                Marker(
+                  point: _deliveryPos!, width: 40, height: 40,
+                  child: Container(
+                    decoration: BoxDecoration(color: Colors.red.shade600, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2.5)),
+                    child: const Icon(Icons.home, color: Colors.white, size: 18),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        // Legend overlay
+        if (_deliveryPos != null)
+          Positioned(
+            top: 10, right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(10), boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 6)]),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _legendItem(Colors.orange.shade700, 'Chợ lấy hàng'),
+                const SizedBox(height: 4),
+                _legendItem(Colors.red.shade600, 'Điểm giao hàng'),
+              ]),
+            ),
+          ),
+      ]),
+    );
+  }
+
   Widget _buildContactCard(
       AddressHelper addr, Map buyer, String storeName, double distKm) {
     return Container(
@@ -1043,7 +1232,7 @@ class _OrderDetailPageState extends State<OrderDetailPage>
       ),
       child: Column(children: [
         // Chợ lấy hàng
-        Row(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -1056,8 +1245,41 @@ class _OrderDetailPageState extends State<OrderDetailPage>
                   style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
               Text(storeName,
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+              Builder(builder: (_) {
+                final choInfo = _order?['cho_info'] as Map<String, dynamic>?;
+                final addr = choInfo?['dia_chi_cho'] as String? ?? '';
+                if (addr.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(addr, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                );
+              }),
             ]),
           ),
+          Builder(builder: (_) {
+            final choInfo = _order?['cho_info'] as Map<String, dynamic>?;
+            final lat = (choInfo?['lat'] as num?)?.toDouble();
+            final lng = (choInfo?['lng'] as num?)?.toDouble();
+            if (lat == null || lng == null) return const SizedBox.shrink();
+            return GestureDetector(
+              onTap: () => _openMapsToMarket(lat, lng),
+              child: Container(
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.navigation_rounded, size: 14, color: Colors.orange.shade700),
+                  const SizedBox(width: 4),
+                  Text('Đến chợ',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.orange.shade800)),
+                ]),
+              ),
+            );
+          }),
         ]),
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 12),
@@ -1105,13 +1327,30 @@ class _OrderDetailPageState extends State<OrderDetailPage>
               },
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _actionBtn(
+              icon: Icons.chat_rounded,
+              label: 'Chat',
+              color: _kGreen,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChatWithSellerPage(
+                    orderId: widget.orderId,
+                    sellerName: storeName,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: _actionBtn(
               icon: Icons.map_rounded,
               label: 'Bản đồ',
               color: Colors.indigo,
-              onTap: () => _showInAppMap(
+              onTap: () => _showMapDialog(
                 addr.address.isNotEmpty ? addr.address : (_order!['dia_chi_giao_hang'] ?? ''),
                 distKm,
               ),
@@ -1206,13 +1445,162 @@ class _OrderDetailPageState extends State<OrderDetailPage>
           ]),
         ),
 
-        // Items list
-        ...products.asMap().entries.map((e) {
-          final isLast = e.key == products.length - 1;
-          return _buildIngredientRow(e.value, isPickingUp, isLast);
-        }),
+        // Items grouped by stall
+        ..._buildIngredientsByStall(products, isPickingUp),
       ]),
     );
+  }
+
+  List<Widget> _buildIngredientsByStall(List<dynamic> products, bool isPickingUp) {
+    // Group by stall_id (fallback to stall name)
+    final groups = <String, List<Map<String, dynamic>>>{};
+    for (final p in products) {
+      final key = (p['stall_id'] as String?) ?? (p['ten_gian_hang'] as String?) ?? 'unknown';
+      groups.putIfAbsent(key, () => []).add(p as Map<String, dynamic>);
+    }
+
+    final stallKeys = groups.keys.toList();
+    final widgets = <Widget>[];
+
+    for (int si = 0; si < stallKeys.length; si++) {
+      final items = groups[stallKeys[si]]!;
+      final first = items.first;
+      final stallName = (first['ten_gian_hang'] as String?) ?? 'Không rõ quầy';
+      final stallLocation = (first['stall_location'] as String?) ?? '';
+      final gridRow = first['grid_row'] as int?;
+      final gridCol = first['grid_col'] as int?;
+      final gridFloor = first['grid_floor'] as int?;
+      final isLastStall = si == stallKeys.length - 1;
+
+      widgets.add(_buildStallHeader(
+        stallName: stallName,
+        stallLocation: stallLocation,
+        gridRow: gridRow,
+        gridCol: gridCol,
+        gridFloor: gridFloor,
+        itemCount: items.length,
+        isPickingUp: isPickingUp,
+      ));
+
+      for (int ii = 0; ii < items.length; ii++) {
+        final isLastItem = isLastStall && ii == items.length - 1;
+        widgets.add(_buildIngredientRow(items[ii], isPickingUp, isLastItem));
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildStallHeader({
+    required String stallName,
+    required String stallLocation,
+    int? gridRow,
+    int? gridCol,
+    int? gridFloor,
+    required int itemCount,
+    required bool isPickingUp,
+  }) {
+    // Build position label: prefer grid info, fallback to stall_location text
+    String? posLabel;
+    if (gridRow != null || gridCol != null || gridFloor != null) {
+      final parts = <String>[];
+      if (gridFloor != null && gridFloor > 0) parts.add('Tầng $gridFloor');
+      if (gridRow != null) parts.add('Hàng $gridRow');
+      if (gridCol != null) parts.add('Cột $gridCol');
+      if (parts.isNotEmpty) posLabel = parts.join(' · ');
+    }
+    if (posLabel == null && stallLocation.isNotEmpty) posLabel = stallLocation;
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(18, isPickingUp ? 12 : 10, 18, isPickingUp ? 12 : 10),
+      decoration: BoxDecoration(
+        color: isPickingUp ? Colors.orange.shade50.withValues(alpha: 0.6) : Colors.grey.shade50,
+        border: Border(top: BorderSide(color: Colors.grey.shade100)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.store_mall_directory, size: 14,
+              color: isPickingUp ? Colors.orange.shade700 : Colors.grey.shade600),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(stallName,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: isPickingUp ? Colors.orange.shade800 : Colors.grey.shade700)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+                color: Colors.grey.shade200, borderRadius: BorderRadius.circular(10)),
+            child: Text('$itemCount món',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+          ),
+        ]),
+        // Vị trí quầy – chỉ hiện khi đang lấy hàng
+        if (isPickingUp && posLabel != null) ...[
+          const SizedBox(height: 8),
+          _buildStallLocationRow(posLabel),
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildStallLocationRow(String posLabel) {
+    final choInfo = _order?['cho_info'] as Map<String, dynamic>?;
+    final lat = (choInfo?['lat'] as num?)?.toDouble();
+    final lng = (choInfo?['lng'] as num?)?.toDouble();
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade100,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.orange.shade300, width: 1),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.place_rounded, size: 13, color: Colors.orange.shade800),
+            const SizedBox(width: 4),
+            Text(posLabel,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.orange.shade900)),
+          ]),
+        ),
+        if (lat != null && lng != null)
+          GestureDetector(
+            onTap: () => _openMapsToMarket(lat, lng),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blue.shade200, width: 1),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.navigation_rounded, size: 13, color: Colors.blue.shade700),
+                const SizedBox(width: 4),
+                Text('Chỉ đường',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.blue.shade700)),
+              ]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _openMapsToMarket(double lat, double lng) {
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Widget _buildIngredientRow(
@@ -1435,36 +1823,52 @@ class _OrderDetailPageState extends State<OrderDetailPage>
   //  TOTAL CARD
   // ─────────────────────────────────────────────────────────
   Widget _buildTotalCard() {
+    final payment = _order!['thanh_toan'] as Map<String, dynamic>?;
+    final method = payment?['hinh_thuc_thanh_toan'];
+    final status = payment?['tinh_trang_thanh_toan'];
+    final isPaid = status == 'da_thanh_toan';
+    final isOnline = method != null && method != 'tien_mat';
+
+    final Color cardColor = isPaid ? Colors.blue.shade50 : _kGreen.withValues(alpha: 0.06);
+    final Color borderColor = isPaid ? Colors.blue.shade200 : _kGreen.withValues(alpha: 0.3);
+    final Color iconColor = isPaid ? Colors.blue.shade600 : _kGreen;
+    final IconData cardIcon = isPaid ? Icons.check_circle_rounded : Icons.payments_rounded;
+
+    final String label = isPaid ? 'ĐÃ THANH TOÁN' : 'THU TỪ KHÁCH';
+    final String sublabel = isPaid
+        ? 'Khách đã thanh toán online — không thu tiền'
+        : isOnline
+            ? 'Chuyển khoản khi giao hàng'
+            : 'Tiền mặt khi giao hàng';
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kGreen.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(color: borderColor, width: 1.5),
       ),
       child: Row(children: [
         Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: _kGreen.withValues(alpha: 0.1), shape: BoxShape.circle),
-          child: const Icon(Icons.payments_rounded, color: _kGreen, size: 22),
+          decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.12), shape: BoxShape.circle),
+          child: Icon(cardIcon, color: iconColor, size: 22),
         ),
         const SizedBox(width: 14),
-        const Expanded(
+        Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('THU TỪ KHÁCH',
-                style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
-            SizedBox(height: 2),
-            Text('Tiền mặt khi giao hàng',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(label, style: TextStyle(fontSize: 11, color: iconColor, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
+            const SizedBox(height: 2),
+            Text(sublabel, style: TextStyle(fontSize: 12, color: isPaid ? Colors.blue.shade700 : Colors.grey, fontWeight: isPaid ? FontWeight.w600 : FontWeight.normal)),
           ]),
         ),
         Text(
-          formatVND(_order!['tong_tien']),
-          style: const TextStyle(
+          isPaid ? '✓ Đã thu' : formatVND(_order!['tong_tien']),
+          style: TextStyle(
               fontWeight: FontWeight.w900,
-              fontSize: 26,
-              color: _kGreen),
+              fontSize: isPaid ? 16 : 26,
+              color: iconColor),
         ),
       ]),
     );
@@ -1490,8 +1894,23 @@ class _OrderDetailPageState extends State<OrderDetailPage>
               style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14)),
         ]),
         const SizedBox(height: 8),
-        Text('Ảnh: ${_order!['pod_image']}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Image.network(
+              '${ApiService.baseUrl}/uploads/${_order!['pod_image']}',
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                alignment: Alignment.center,
+                color: Colors.grey.shade100,
+                child: Text('Ảnh: ${_order!['pod_image']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              ),
+            ),
+          ),
+        ),
         if (_order!['pod_note']?.isNotEmpty == true)
           Text('Ghi chú: ${_order!['pod_note']}',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),

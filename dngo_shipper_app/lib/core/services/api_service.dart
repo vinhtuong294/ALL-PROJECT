@@ -10,9 +10,9 @@ class UnauthorizedException implements Exception {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:8002';
-  static const String coreBaseUrl = 'http://localhost:8002';
-  static const Duration _timeout = Duration(seconds: 15);
+  static const String baseUrl = 'http://192.168.1.155:8002';
+  static const String coreBaseUrl = 'http://192.168.1.155:8002';
+  static const Duration _timeout = Duration(seconds: 60);
 
   // ── helpers ──
   static Future<Map<String, String>> _headers() async {
@@ -25,7 +25,11 @@ class ApiService {
 
   static dynamic _decode(http.Response res) {
     final body = utf8.decode(res.bodyBytes);
-    return jsonDecode(body);
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return {'detail': body.isNotEmpty ? body : 'Lỗi không xác định (${res.statusCode})'};
+    }
   }
 
   // ══════════════════════════════════════════════
@@ -351,5 +355,58 @@ class ApiService {
     );
     if (res.statusCode == 200) return _decode(res);
     throw Exception('Lỗi đánh dấu tất cả đã đọc');
+  }
+
+  // ══════════════════════════════════════════════
+  //  SELLER-SHIPPER CHAT
+  // ══════════════════════════════════════════════
+
+  /// GET /api/shipper/orders/{id}/chat
+  static Future<List<dynamic>> getChatMessages(String orderId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/shipper/orders/$orderId/chat'),
+      headers: await _headers(),
+    ).timeout(_timeout);
+    if (res.statusCode == 200) return (_decode(res)['messages'] as List<dynamic>?) ?? [];
+    throw Exception('Lỗi tải tin nhắn');
+  }
+
+  /// POST /api/shipper/orders/{id}/chat
+  static Future<void> sendChatMessage(String orderId, String text) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/shipper/orders/$orderId/chat'),
+      headers: await _headers(),
+      body: jsonEncode({'message_text': text}),
+    ).timeout(_timeout);
+    if (res.statusCode != 200) throw Exception('Lỗi gửi tin nhắn');
+  }
+
+/// POST /api/shipper/orders/optimize-route
+  static Future<Map<String, dynamic>> optimizeRoute(String consolidationId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/shipper/orders/optimize-route'),
+      headers: await _headers(),
+      body: jsonEncode({'consolidation_id': consolidationId}),
+    ).timeout(const Duration(seconds: 20));
+    if (res.statusCode == 200) return _decode(res);
+    throw Exception(_decode(res)['detail'] ?? 'Lỗi tối ưu tuyến đường');
+  }
+
+  /// POST /api/upload/single — trả về URL ảnh đã lưu trên server
+  static Future<String> uploadImage(String filePath) async {
+    final token = await AuthStorage.getToken();
+    final req = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/api/upload/single?folder=pod'),
+    );
+    if (token != null) req.headers['Authorization'] = 'Bearer $token';
+    req.files.add(await http.MultipartFile.fromPath('file', filePath));
+    final streamed = await req.send().timeout(const Duration(seconds: 30));
+    final res = await http.Response.fromStream(streamed);
+    if (res.statusCode == 200) {
+      final data = _decode(res);
+      return data['data']['url'] as String;
+    }
+    throw Exception('Upload ảnh thất bại (${res.statusCode})');
   }
 }

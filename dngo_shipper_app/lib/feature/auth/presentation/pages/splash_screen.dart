@@ -28,7 +28,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (token != null) {
       try {
-        await ApiService.getMe(); // validate token + refresh user data
+        await ApiService.getMe();
         target = const MainScreen();
       } catch (_) {
         await AuthStorage.clear();
@@ -51,53 +51,81 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.dark));
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ));
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          Positioned(
-            left: 0, right: 0, bottom: -50,
-            child: Opacity(
-              opacity: 0.9,
-              child: Image.network(
-                'https://t3.ftcdn.net/jpg/04/47/98/69/360_F_447986940_l6TngbSOT1q8Ips4Ggq3q3PqOa8XZ0N5.jpg',
-                fit: BoxFit.cover,
-                height: MediaQuery.of(context).size.height * 0.6,
-                errorBuilder: (c, e, s) => Container(height: MediaQuery.of(context).size.height * 0.6, color: Colors.white),
-              ),
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/img/splash_background.png'),
+            fit: BoxFit.cover,
           ),
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [Colors.white, Colors.white.withValues(alpha: 0.6), Colors.transparent],
-                  stops: const [0.4, 0.6, 1.0],
-                ),
-              ),
-            ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              const Spacer(flex: 1),
+              _buildLogo(),
+              const Spacer(flex: 10),
+              _buildLoadingIndicator(),
+              const SizedBox(height: 60),
+            ],
           ),
-          Align(
-            alignment: const Alignment(0, -0.6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.network('https://cdn-icons-png.flaticon.com/512/3753/3753061.png', height: 50, color: const Color(0xFF2F8000),
-                  errorBuilder: (c, e, s) => const Icon(Icons.shopping_cart, size: 50, color: Color(0xFF2F8000)),
-                ),
-                const SizedBox(width: 8),
-                const Text('DNGo', style: TextStyle(color: Color(0xFF1E3A8A), fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-              ],
-            ),
-          ),
-          const Align(
-            alignment: Alignment(0, 0.3),
-            child: SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF2F8000))),
-          ),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildLogo() {
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 800),
+      tween: Tween(begin: 0.0, end: 1.0),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Opacity(opacity: value, child: child),
+        );
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.asset(
+          'assets/img/splash_logo.png',
+          width: 206,
+          height: 91,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Column(
+      children: [
+        const SizedBox(
+          width: 40,
+          height: 40,
+          child: CircularProgressIndicator(
+            strokeWidth: 3,
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B40F)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Đang tải...',
+          style: TextStyle(
+            color: const Color(0xFF00B40F).withValues(alpha: 0.5),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
     );
   }
 }

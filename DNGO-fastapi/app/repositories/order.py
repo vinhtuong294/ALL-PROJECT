@@ -78,32 +78,22 @@ def get_order_detail(db: Session, order_id: str, user_id: str) -> Optional[Dict[
     if not order:
         return None
 
-    order_details = db.query(OrderDetail).filter(
-        OrderDetail.order_id == order_id
-    ).all()
+    from sqlalchemy import and_
+
+    detail_rows = (
+        db.query(OrderDetail, Goods, Ingredient, Stall)
+        .outerjoin(Goods, and_(
+            Goods.ingredient_id == OrderDetail.ingredient_id,
+            Goods.stall_id == OrderDetail.stall_id
+        ))
+        .outerjoin(Ingredient, Ingredient.ingredient_id == OrderDetail.ingredient_id)
+        .outerjoin(Stall, Stall.stall_id == OrderDetail.stall_id)
+        .filter(OrderDetail.order_id == order_id)
+        .all()
+    )
 
     enriched_items = []
-
-    for item in order_details:
-        # Lấy goods
-        goods = db.query(Goods).filter(
-            Goods.ingredient_id == item.ingredient_id,
-            Goods.stall_id == item.stall_id
-        ).first()
-
-        ingredient = None
-        stall = None
-
-        # 🔥 FIX: query riêng Ingredient và Stall
-        if goods:
-            ingredient = db.query(Ingredient).filter(
-                Ingredient.ingredient_id == goods.ingredient_id
-            ).first()
-
-            stall = db.query(Stall).filter(
-                Stall.stall_id == goods.stall_id
-            ).first()
-
+    for item, goods, ingredient, stall in detail_rows:
         enriched_items.append({
             "ma_nguyen_lieu": item.ingredient_id,
             "ma_gian_hang": item.stall_id,
@@ -111,20 +101,17 @@ def get_order_detail(db: Session, order_id: str, user_id: str) -> Optional[Dict[
             "gia_cuoi": item.final_price,
             "thanh_tien": (item.final_price or 0) * (item.quantity_order or 0),
             "ma_mon_an": item.dish_id,
-
             "nguyen_lieu": {
                 "ma_nguyen_lieu": ingredient.ingredient_id,
                 "ten_nguyen_lieu": ingredient.ingredient_name,
                 "don_vi": goods.unit if goods else None,
             } if ingredient else None,
-
             "gian_hang": {
                 "ma_gian_hang": stall.stall_id,
                 "ten_gian_hang": stall.stall_name,
                 "vi_tri": stall.stall_location,
                 "hinh_anh": stall.stall_image,
             } if stall else None,
-
             "don_vi_ban": goods.unit if goods else None,
         })
 
@@ -198,9 +185,11 @@ def cancel_order(db: Session, order_id: str, user_id: str) -> Dict[str, Any]:
     if not cart:
         raise Exception("Không tìm thấy giỏ hàng")
 
-    # Khôi phục sản phẩm về giỏ hàng
+    # Khôi phục sản phẩm về giỏ hàng (bỏ qua phí ship NLQD01)
     restored_items = []
     for item in order_details:
+        if item.ingredient_id == "NLQD01":
+            continue
         existing = db.query(CartDetail).filter(
             CartDetail.cart_id == cart.cart_id,
             CartDetail.ingredient_id == item.ingredient_id,

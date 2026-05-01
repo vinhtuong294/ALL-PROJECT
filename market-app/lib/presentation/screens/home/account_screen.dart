@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:market_app/core/constants/app_colors.dart';
-import 'package:market_app/core/constants/app_constants.dart';
 import 'package:market_app/presentation/widgets/common/market_app_bar.dart';
 import 'package:market_app/presentation/widgets/common/market_bottom_nav_bar.dart';
 import 'change_password_screen.dart';
@@ -50,8 +49,8 @@ class _AccountScreenState extends State<AccountScreen> {
 
     // Pre-populate from token if available
     final prefs = sl<SharedPreferences>();
-    final token = prefs.getString('access_token') ?? AppConstants.tokenKey;
-    if (token.isNotEmpty) {
+    final token = prefs.getString('access_token');
+    if (token != null && token.isNotEmpty) {
       final payload = JwtUtils.decode(token);
       if (payload != null) {
         final userName = payload['user_name'] as String?;

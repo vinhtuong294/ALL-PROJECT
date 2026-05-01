@@ -11,355 +11,461 @@ class MarketMapScreen extends StatefulWidget {
   State<MarketMapScreen> createState() => _MarketMapScreenState();
 }
 
-class _MarketMapScreenState extends State<MarketMapScreen> {
+class _MarketMapScreenState extends State<MarketMapScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   List<MarketMapStall> _stalls = [];
   String? _error;
 
-  final double cellWidth = 120.0;
-  final double cellHeight = 90.0;
-  final int totalCols = 14;
-  final int totalRows = 5;
+  static const double cellW = 90.0;
+  static const double cellH = 70.0;
+  static const double pathW = 44.0;
+  static const double margin = 160.0;
+  static const int cols = 20;
+  static const int rows = 15;
+  static const double depth = 6.0;
 
-  final TransformationController _transformController = TransformationController();
-  double _currentScale = 0.7;
+  late AnimationController _pulse;
+  late Animation<double> _pulseAnim;
+  final TransformationController _transform = TransformationController();
+  double _currentScale = 0.5;
 
-  @override
-  void dispose() {
-    _transformController.dispose();
-    super.dispose();
+  static Color _zoneColor(int col, int row) {
+    if (row <= 4 && col <= 9) return const Color(0xFF22C55E);
+    if (row <= 4) return const Color(0xFFEF4444);
+    if (row <= 9 && col <= 7) return const Color(0xFF38BDF8);
+    if (row <= 9) return const Color(0xFFA855F7);
+    return const Color(0xFFF97316);
   }
 
-  void _zoomIn() {
-    final double newScale = (_currentScale + 0.2).clamp(0.2, 3.0);
-    _setScale(newScale);
+  double _cx(int col) {
+    double x = col * cellW;
+    if (col > 7) x += pathW;
+    if (col > 9) x += pathW;
+    return x;
   }
 
-  void _zoomOut() {
-    final double newScale = (_currentScale - 0.2).clamp(0.2, 3.0);
-    _setScale(newScale);
+  double _ry(int row) {
+    double y = row * cellH;
+    if (row > 4) y += pathW;
+    if (row > 9) y += pathW;
+    return y;
   }
 
+  void _zoomIn()   => _setScale((_currentScale + 0.2).clamp(0.1, 3.0));
+  void _zoomOut()  => _setScale((_currentScale - 0.2).clamp(0.1, 3.0));
   void _resetZoom() {
-    _setScale(0.7);
-    _transformController.value = Matrix4.identity()..scale(0.7);
+    _setScale(0.5);
+    _transform.value = Matrix4.identity()..scaleByDouble(0.5, 0.5, 0.5, 1.0);
   }
 
   void _setScale(double scale) {
     setState(() => _currentScale = scale);
-    final Matrix4 matrix = _transformController.value.clone();
-    final double currentScaleInMatrix = matrix.getMaxScaleOnAxis();
-    final double factor = scale / currentScaleInMatrix;
-    matrix.scale(factor);
-    _transformController.value = matrix;
+    final m = _transform.value.clone();
+    final factor = scale / m.getMaxScaleOnAxis();
+    m.scaleByDouble(factor, factor, factor, 1.0);
+    _transform.value = m;
   }
 
   @override
   void initState() {
     super.initState();
-    // Set initial zoom to 0.7 so full map is visible
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _transformController.value = Matrix4.identity()..scale(0.7);
+      _transform.value = Matrix4.identity()..scaleByDouble(0.5, 0.5, 0.5, 1.0);
     });
+    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))
+      ..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.35, end: 0.85).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
     _loadStalls();
   }
 
+  @override
+  void dispose() {
+    _pulse.dispose();
+    _transform.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadStalls() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    setState(() { _isLoading = true; _error = null; });
     try {
       final repo = sl<MarketRepository>();
-      final response = await repo.getMapStalls();
-      if (response.success) {
-        setState(() {
-          _stalls = response.data;
-          _isLoading = false;
-        });
+      final res = await repo.getMapStalls();
+      if (res.success) {
+        setState(() { _stalls = res.data; _isLoading = false; });
       } else {
-        setState(() {
-          _error = 'Không thể tải bản đồ';
-          _isLoading = false;
-        });
+        setState(() { _error = 'Không thể tải bản đồ'; _isLoading = false; });
       }
     } catch (e) {
-      setState(() {
-        _error = 'Lỗi hệ thống: $e';
-        _isLoading = false;
-      });
+      setState(() { _error = 'Lỗi hệ thống: $e'; _isLoading = false; });
     }
   }
 
-  void _showStallDetail(BuildContext context, MarketMapStall stall) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final bool isClosed = stall.trangThai == "dong_cua";
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(stall.tenGianHang ?? 'Gian Hàng Trống'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Chủ sạp: ${stall.nguoiBan ?? "Chưa rõ"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('Tọa độ: X=${stall.xCol}, Y=${stall.yRow}'),
-              const SizedBox(height: 8),
-              if (stall.loaiHang != null) Text('Loại hàng: ${stall.loaiHang}'),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Container(
-                    width: 12, height: 12,
-                    decoration: BoxDecoration(
-                      color: isClosed ? Colors.grey : Colors.green,
-                      shape: BoxShape.circle,
-                    ),
+  // ── Stall with 3-D box effect ─────────────────────────────────────
+  Widget _buildStall(MarketMapStall stall) {
+    final closed = stall.trangThai == 'dong_cua';
+    final base   = closed ? const Color(0xFF374151) : _zoneColor(stall.xCol, stall.yRow);
+    final shadow = closed ? const Color(0xFF1F2937) : Color.lerp(base, Colors.black, 0.45)!;
+    final left   = margin + _cx(stall.xCol) + 3;
+    final top    = margin + _ry(stall.yRow)  + 3;
+    const w = cellW - 6;
+    const h = cellH - 6;
+
+    return Positioned(
+      left: left, top: top,
+      child: GestureDetector(
+        onTap: () => _showDetail(stall),
+        child: AnimatedBuilder(
+          animation: _pulseAnim,
+          builder: (context, child) => SizedBox(
+            width: w + depth, height: h + depth,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: depth, top: depth,
+                  child: Container(
+                    width: w, height: h,
+                    decoration: BoxDecoration(color: shadow, borderRadius: BorderRadius.circular(8)),
                   ),
-                  const SizedBox(width: 8),
-                  Text(isClosed ? 'Đang đóng cửa' : 'Đang hoạt động', style: TextStyle(color: isClosed ? Colors.grey : Colors.green, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Đóng', style: TextStyle(color: AppColors.primary)),
+                ),
+                Container(
+                  width: w, height: h,
+                  decoration: BoxDecoration(
+                    color: base,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: closed
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.28),
+                      width: 1,
+                    ),
+                    boxShadow: closed
+                        ? const []
+                        : [BoxShadow(
+                            color: base.withValues(alpha: _pulseAnim.value * 0.55),
+                            blurRadius: 12,
+                            spreadRadius: 1,
+                          )],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        stall.tenGianHang ?? 'Trống',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: closed ? Colors.white38 : Colors.white,
+                          decoration: closed ? TextDecoration.lineThrough : null,
+                          decorationColor: Colors.white38,
+                          height: 1.2,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (!closed && stall.nguoiBan != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          stall.nguoiBan!,
+                          style: TextStyle(fontSize: 8, color: Colors.white.withValues(alpha: 0.6)),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ),
     );
   }
 
+  // ── Detail dialog ─────────────────────────────────────────────────
+  void _showDetail(MarketMapStall stall) {
+    final closed = stall.trangThai == 'dong_cua';
+    final color  = _zoneColor(stall.xCol, stall.yRow);
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFF0D1B2A),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: color.withValues(alpha: 0.5)),
+                  ),
+                  child: Icon(Icons.storefront, color: color, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(stall.tenGianHang ?? 'Gian Hàng Trống',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(stall.nguoiBan ?? 'Chưa rõ chủ sạp',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 13)),
+                  ],
+                )),
+              ]),
+              const SizedBox(height: 14),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 10),
+              _dRow(Icons.grid_on_outlined, 'Vị trí', 'Cột ${stall.xCol} · Hàng ${stall.yRow}'),
+              if (stall.loaiHang != null)
+                _dRow(Icons.category_outlined, 'Loại hàng', stall.loaiHang!),
+              _dRow(
+                closed ? Icons.cancel_outlined : Icons.check_circle_outline,
+                'Trạng thái', closed ? 'Đóng cửa' : 'Đang mở',
+                valueColor: closed ? Colors.red.shade400 : Colors.green.shade400,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    backgroundColor: color.withValues(alpha: 0.15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text('Đóng', style: TextStyle(color: color)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dRow(IconData icon, String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Row(children: [
+        Icon(icon, size: 15, color: Colors.white30),
+        const SizedBox(width: 8),
+        Text('$label: ', style: const TextStyle(color: Colors.white38, fontSize: 13)),
+        Expanded(child: Text(value,
+          style: TextStyle(color: valueColor ?? Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+          overflow: TextOverflow.ellipsis)),
+      ]),
+    );
+  }
+
+  // ── Zone border ───────────────────────────────────────────────────
+  Widget _buildZone(int c0, int c1, int r0, int r1, Color color, String label) {
+    return Positioned(
+      left: margin + _cx(c0) - 3, top: margin + _ry(r0) - 3,
+      width: _cx(c1) + cellW - _cx(c0) + 6,
+      height: _ry(r1) + cellH - _ry(r0) + 6,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.22), width: 1.5),
+        ),
+        padding: const EdgeInsets.only(left: 8, top: 6),
+        child: Text(label, style: TextStyle(
+          color: color.withValues(alpha: 0.55), fontSize: 10,
+          fontWeight: FontWeight.bold, letterSpacing: 0.6,
+        )),
+      ),
+    );
+  }
+
+  Widget _entrance({double? l, double? t, double? r, double? b, required String label, required IconData icon}) {
+    return Positioned(
+      left: l, top: t, right: r, bottom: b,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.45)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: Colors.amber),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.bold)),
+        ]),
+      ),
+    );
+  }
+
+  // ── Full map ──────────────────────────────────────────────────────
   Widget _buildMapContent() {
-    // 14 columns x 5 rows. 
-    final mapWidth = totalCols * cellWidth;
-    final mapHeight = totalRows * cellHeight;
+    final mw = _cx(cols) + margin * 2;
+    final mh = _ry(rows) + margin * 2;
+    final openCount = _stalls.where((s) => s.trangThai != 'dong_cua').length;
 
     return Stack(
       children: [
-        // Map canvas
         InteractiveViewer(
-          transformationController: _transformController,
+          transformationController: _transform,
           boundaryMargin: const EdgeInsets.all(200),
-          minScale: 0.2,
+          minScale: 0.1,
           maxScale: 3.0,
           constrained: false,
-          child: Container(
-            width: mapWidth,
-            height: mapHeight,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              border: Border.all(color: Colors.grey, width: 2),
-              borderRadius: BorderRadius.circular(16),
-            ),
+          child: SizedBox(
+            width: mw, height: mh,
             child: Stack(
-              clipBehavior: Clip.none,
               children: [
-                // Background Zones
-                Positioned(
-                  left: 1 * cellWidth, top: 1 * cellHeight,
-                  width: 4 * cellWidth, height: 3 * cellHeight,
-                  child: Container(color: Colors.green.withOpacity(0.15)),
-                ),
-                Positioned(
-                  left: 5 * cellWidth, top: 1 * cellHeight,
-                  width: 4 * cellWidth, height: 3 * cellHeight,
-                  child: Container(color: Colors.red.withOpacity(0.1)),
-                ),
-                Positioned(
-                  left: 9 * cellWidth, top: 1 * cellHeight,
-                  width: 4 * cellWidth, height: 3 * cellHeight,
-                  child: Container(color: Colors.blue.withOpacity(0.15)),
-                ),
-                // Zone labels
-                Positioned(
-                  left: 2.5 * cellWidth, top: 0.2 * cellHeight,
-                  child: Text('KHU RAU CỦ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800], fontSize: 18)),
-                ),
-                Positioned(
-                  left: 6.5 * cellWidth, top: 0.2 * cellHeight,
-                  child: Text('KHU THỊT', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red[800], fontSize: 18)),
-                ),
-                Positioned(
-                  left: 10.5 * cellWidth, top: 0.2 * cellHeight,
-                  child: Text('KHU HẢI SẢN', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[800], fontSize: 18)),
-                ),
-                // 4 Entrances
-                Positioned(
-                  left: mapWidth / 2 - 30, top: -10,
-                  child: Column(
-                    children: [
-                      const Icon(Icons.arrow_downward, size: 28, color: Colors.orange),
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('CỬA BẮC', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: mapWidth / 2 - 30, bottom: -10,
-                  child: Column(
-                    children: [
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('CỬA NAM', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
-                      const Icon(Icons.arrow_upward, size: 28, color: Colors.orange),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: -10, top: mapHeight / 2 - 30,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.arrow_forward, size: 28, color: Colors.orange),
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('CỬA\nTÂY', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  right: -10, top: mapHeight / 2 - 30,
-                  child: Row(
-                    children: [
-                      Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)), child: const Text('CỬA\nĐÔNG', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
-                      const Icon(Icons.arrow_back, size: 28, color: Colors.orange),
-                    ],
-                  ),
-                ),
-                // Render Stalls
-                ..._stalls.map((stall) {
-                  final double left = (stall.xCol + 1) * cellWidth;
-                  final double top = (stall.yRow + 1) * cellHeight;
-                  final bool isClosed = stall.trangThai == "dong_cua";
-
-                  return Positioned(
-                    left: left + 4,
-                    top: top + 4,
-                    width: cellWidth - 8,
-                    height: cellHeight - 8,
-                    child: GestureDetector(
-                      onTap: () => _showStallDetail(context, stall),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: isClosed ? Colors.grey.shade300 : Colors.white,
-                          border: Border.all(
-                            color: isClosed ? Colors.grey.shade500 : AppColors.primary,
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            if (!isClosed) const BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-                          ]
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              stall.tenGianHang ?? 'Trống',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: isClosed ? Colors.grey.shade600 : Colors.black,
-                                decoration: isClosed ? TextDecoration.lineThrough : null,
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              stall.nguoiBan ?? '',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isClosed ? Colors.grey.shade600 : Colors.blue.shade800,
-                              ),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+                Positioned.fill(child: CustomPaint(painter: _BgPainter(mw, mh))),
+                _path(l: margin + _cx(7) + cellW, t: margin - 8, w: pathW, h: _ry(rows) + 16),
+                _path(l: margin + _cx(9) + cellW, t: margin - 8, w: pathW, h: _ry(rows) + 16),
+                _path(l: margin - 8, t: margin + _ry(4) + cellH, w: _cx(cols) + 16, h: pathW),
+                _path(l: margin - 8, t: margin + _ry(9) + cellH, w: _cx(cols) + 16, h: pathW),
+                _buildZone(0, 9, 0, 4, const Color(0xFF22C55E), 'RAU CỦ & TRÁI CÂY'),
+                _buildZone(10, 19, 0, 4, const Color(0xFFEF4444), 'THỊT CÁC LOẠI'),
+                _buildZone(0, 7, 5, 9, const Color(0xFF38BDF8), 'HẢI SẢN TƯƠI SỐNG'),
+                _buildZone(8, 19, 5, 9, const Color(0xFFA855F7), 'TẠP HÓA / ĐỒ KHÔ'),
+                _buildZone(0, 9, 10, 14, const Color(0xFFF97316), 'ẨM THỰC / GIA VỊ'),
+                _street(l: 14, t: mh / 2 - 80, label: 'NGUYỄN BA LAN', rotate: true),
+                _street(b: 18, l: mw / 5, label: 'NGUYỄN BA LAN'),
+                _street(t: 18, l: mw / 5, label: 'MỸ ĐA ĐÔNG 2'),
+                _street(r: 14, t: mh / 2 - 100, label: 'MỸ ĐA ĐÔNG 1', rotate: true),
+                ..._stalls.map(_buildStall),
+                _entrance(l: margin + _cx(10) - 52, t: margin - 42, label: 'CỔNG BẮC', icon: Icons.north),
+                _entrance(l: margin + _cx(10) - 78, b: margin - 42, label: 'CỔNG NAM (Mặt chính)', icon: Icons.south),
+                _entrance(l: margin - 86, t: margin + _ry(7) - 13, label: 'CỔNG TÂY', icon: Icons.west),
+                _entrance(r: margin - 86, t: margin + _ry(7) - 13, label: 'CỔNG ĐÔNG', icon: Icons.east),
               ],
             ),
           ),
         ),
 
-        // Zoom control buttons overlay
+        // Zoom controls
         Positioned(
-          bottom: 24,
-          right: 16,
-          child: Column(
-            children: [
-              _zoomButton(Icons.add, _zoomIn, tooltip: 'Phóng to'),
-              const SizedBox(height: 8),
-              _zoomButton(Icons.remove, _zoomOut, tooltip: 'Thu nhỏ'),
-              const SizedBox(height: 8),
-              _zoomButton(Icons.fit_screen, _resetZoom, tooltip: 'Vừa màn hình'),
-            ],
-          ),
+          bottom: 24, right: 16,
+          child: Column(children: [
+            _zoomBtn(Icons.add, _zoomIn, 'Phóng to'),
+            const SizedBox(height: 8),
+            _zoomBtn(Icons.remove, _zoomOut, 'Thu nhỏ'),
+            const SizedBox(height: 8),
+            _zoomBtn(Icons.fit_screen, _resetZoom, 'Vừa màn hình'),
+          ]),
         ),
 
-        // Legend overlay
+        // Legend
         Positioned(
-          top: 12,
-          left: 12,
+          top: 12, left: 12,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.92),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)],
+              color: const Color(0xFF0D1B2A).withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Chú giải', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(height: 6),
-                _legendRow(Colors.green.withOpacity(0.3), 'Khu Rau Củ & Gia Vị'),
-                _legendRow(Colors.red.withOpacity(0.2), 'Khu Thịt'),
-                _legendRow(Colors.blue.withOpacity(0.3), 'Khu Hải Sản'),
-                const SizedBox(height: 4),
-                _legendRow(AppColors.primary, 'Đang mở cửa', isCircle: true),
-                _legendRow(Colors.grey, 'Đóng cửa', isCircle: true),
+                const Text('CHÚ GIẢI',
+                    style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const SizedBox(height: 8),
+                _lgRow(const Color(0xFF22C55E), 'Rau Củ & Trái Cây'),
+                _lgRow(const Color(0xFFEF4444), 'Thịt Các Loại'),
+                _lgRow(const Color(0xFF38BDF8), 'Hải Sản Tươi Sống'),
+                _lgRow(const Color(0xFFA855F7), 'Tạp Hóa / Đồ Khô'),
+                _lgRow(const Color(0xFFF97316), 'Ẩm Thực / Gia Vị'),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 5),
+                  child: Divider(color: Colors.white10, height: 1),
+                ),
+                _lgRow(Colors.white, 'Đang mở', dot: true),
+                _lgRow(Colors.grey, 'Đóng cửa', dot: true),
               ],
             ),
           ),
         ),
 
-        // Stall count badge
+        // Stats
         Positioned(
-          top: 12,
-          right: 16,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text('${_stalls.length} sạp', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
+          top: 12, right: 16,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            _badge('${_stalls.length}', 'tổng sạp', const Color(0xFF1D4ED8)),
+            const SizedBox(height: 6),
+            _badge('$openCount', 'đang mở', const Color(0xFF15803D)),
+          ]),
         ),
       ],
     );
   }
 
-  Widget _zoomButton(IconData icon, VoidCallback onTap, {String? tooltip}) {
+  // ── Helpers ───────────────────────────────────────────────────────
+  Widget _path({required double l, required double t, required double w, required double h}) {
+    return Positioned(left: l, top: t, width: w, height: h,
+      child: CustomPaint(painter: _PathPainter(w, h)));
+  }
+
+  Widget _street({double? l, double? t, double? r, double? b, required String label, bool rotate = false}) {
+    final child = Text(label,
+      style: TextStyle(color: Colors.white.withValues(alpha: 0.05), fontSize: 26,
+          fontWeight: FontWeight.bold, letterSpacing: 10));
+    return Positioned(left: l, top: t, right: r, bottom: b,
+      child: rotate ? RotatedBox(quarterTurns: 3, child: child) : child);
+  }
+
+  Widget _lgRow(Color color, String label, {bool dot = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(children: [
+        Container(
+          width: dot ? 8 : 14, height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: dot ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: dot ? null : BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.white54)),
+      ]),
+    );
+  }
+
+  Widget _badge(String count, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 8)],
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(count, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 11)),
+      ]),
+    );
+  }
+
+  Widget _zoomBtn(IconData icon, VoidCallback onTap, String tooltip) {
     return Tooltip(
-      message: tooltip ?? '',
+      message: tooltip,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 44,
-          height: 44,
+          width: 44, height: 44,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFF0D1B2A).withValues(alpha: 0.9),
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 6)],
+            border: Border.all(color: Colors.white12),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 6)],
           ),
           child: Icon(icon, color: AppColors.primary, size: 22),
         ),
@@ -367,66 +473,103 @@ class _MarketMapScreenState extends State<MarketMapScreen> {
     );
   }
 
-  Widget _legendRow(Color color, String label, {bool isCircle = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Container(
-            width: isCircle ? 10 : 16,
-            height: 10,
-            decoration: BoxDecoration(
-              color: color,
-              shape: isCircle ? BoxShape.circle : BoxShape.rectangle,
-              borderRadius: isCircle ? null : BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 11)),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFF0A1628),
       appBar: AppBar(
-        title: const Text('📍 Sơ Đồ Chợ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.primary,
+        title: const Text('📍 Sơ Đồ Chợ',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF0D1B2A),
         iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => _loadStalls(),
+            onPressed: _loadStalls,
             tooltip: 'Tải lại',
-          )
+          ),
         ],
       ),
       body: _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : (_error != null
-            ? Center(child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                    const SizedBox(height: 16),
-                    Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _loadStalls,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Thử lại'),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-                    ),
-                  ],
-                ),
-              ))
-            : _buildMapContent()
-          ),
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF22C55E)))
+          : _error != null
+              ? Center(child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                      const SizedBox(height: 16),
+                      Text(_error!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _loadStalls,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Thử lại'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                      ),
+                    ],
+                  ),
+                ))
+              : _buildMapContent(),
     );
   }
+}
+
+// ── Painters ──────────────────────────────────────────────────────────
+
+class _BgPainter extends CustomPainter {
+  final double w, h;
+  _BgPainter(this.w, this.h);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = const Color(0xFF0A1628));
+    final dot = Paint()..color = Colors.white.withValues(alpha: 0.045);
+    const step = 28.0;
+    for (double x = 0; x < w; x += step) {
+      for (double y = 0; y < h; y += step) {
+        canvas.drawCircle(Offset(x, y), 1.2, dot);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BgPainter old) => false;
+}
+
+class _PathPainter extends CustomPainter {
+  final double w, h;
+  _PathPainter(this.w, this.h);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), Paint()..color = const Color(0xFF0F1E30));
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.08)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    const dashLen = 8.0;
+    const gap = 6.0;
+    if (w > h) {
+      double x = 0;
+      final y = h / 2;
+      while (x < w) {
+        canvas.drawLine(Offset(x, y), Offset((x + dashLen).clamp(0, w), y), paint);
+        x += dashLen + gap;
+      }
+    } else {
+      double y = 0;
+      final x = w / 2;
+      while (y < h) {
+        canvas.drawLine(Offset(x, y), Offset(x, (y + dashLen).clamp(0, h)), paint);
+        y += dashLen + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PathPainter old) => false;
 }

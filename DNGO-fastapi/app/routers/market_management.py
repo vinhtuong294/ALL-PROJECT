@@ -19,6 +19,7 @@ class RegisterStallRequest(BaseModel):
     grid_col: int
     grid_row: int
     grid_floor: Optional[int] = None
+    tien_thue_mac_dinh: Optional[float] = 500000
 
 
 @router.get("/loai-hang-hoa")
@@ -92,7 +93,7 @@ def confirm_stall_fee_payment(
     if "chuyen" in req.payment_method.lower():
         pm = "chuyen_khoan"
         
-    result = mm_repo.confirm_stall_fee_payment(db, fee_id, pm, req.note, req.amount)
+    result = mm_repo.confirm_stall_fee_payment(db, fee_id, pm, req.amount)
     if not result:
         raise HTTPException(404, "Không tìm thấy thông tin thu thuế")
     return result
@@ -151,7 +152,8 @@ def register_stall(
             stall_location=body.stall_location,
             grid_col=body.grid_col,
             grid_row=body.grid_row,
-            grid_floor=body.grid_floor
+            grid_floor=body.grid_floor,
+            stall_fee=body.tien_thue_mac_dinh or 500000
         )
         return {"success": True, "data": result}
     except ValueError as e:
@@ -223,7 +225,7 @@ def update_stall_status(
     db: Session = Depends(get_db),
     current_user: AuthUser = Depends(allow("quan_ly_cho"))
 ):
-    result = mm_repo.update_stall_status(db, stall_id, body.status, body.note)
+    result = mm_repo.update_stall_status(db, stall_id, body.status)
     if not result:
         raise HTTPException(404, "Không tìm thấy gian hàng")
     return result
@@ -239,6 +241,23 @@ def list_pending_sellers(
     return mm_repo.list_pending_sellers(db, page, limit, search)
 
 
+class SendFeeNotificationRequest(BaseModel):
+    title: str
+    body: str
+
+
+@router.post("/gui-thong-bao-phi")
+def send_fee_notifications(
+    req: SendFeeNotificationRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("quan_ly_cho"))
+):
+    manage_id = mm_repo.get_manage_id_by_user(db, current_user.user_id)
+    if not manage_id:
+        raise HTTPException(404, "Không tìm thấy thông tin quản lý chợ")
+    return mm_repo.send_fee_notifications(db, manage_id, req.title, req.body)
+
+
 @router.patch("/approve-seller/{user_id}")
 def approve_seller(
     user_id: str,
@@ -246,7 +265,56 @@ def approve_seller(
     current_user: AuthUser = Depends(allow("quan_ly_cho"))
 ):
     """Duyệt tiểu thương (approval_status=1)"""
-    result = mm_repo.approve_seller(db, user_id)
+    try:
+        result = mm_repo.approve_seller(db, user_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if not result:
         raise HTTPException(404, "Không tìm thấy tiểu thương")
     return {"success": True, "message": "Duyệt người bán thành công"}
+
+
+# ==================== ADMIN ENDPOINTS ====================
+
+class ToggleUserStatusRequest(BaseModel):
+    status: str  # mo_cua / dong_cua
+
+
+@router.get("/admin/dashboard")
+def admin_dashboard(
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("admin"))
+):
+    """Dashboard tổng quan toàn hệ thống dành cho admin."""
+    return mm_repo.get_admin_dashboard(db)
+
+
+@router.get("/admin/users")
+def admin_list_users(
+    role: Optional[str] = Query(None, description="nguoi_mua | nguoi_ban | shipper | quan_ly_cho | tat_ca"),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, description="mo_cua | dong_cua | tat_ca"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("admin"))
+):
+    """Danh sách tất cả tài khoản, lọc theo role / trạng thái."""
+    return mm_repo.list_admin_users(db, role=role, search=search, status=status, page=page, limit=limit)
+
+
+@router.patch("/admin/users/{user_id}/status")
+def admin_toggle_user_status(
+    user_id: str,
+    body: ToggleUserStatusRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("admin"))
+):
+    """Khóa (dong_cua) hoặc mở (mo_cua) tài khoản người dùng."""
+    try:
+        result = mm_repo.admin_toggle_user_status(db, user_id, body.status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not result:
+        raise HTTPException(404, "Không tìm thấy người dùng")
+    return result

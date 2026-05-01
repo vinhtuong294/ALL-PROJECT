@@ -134,8 +134,41 @@ def login(
         success=True
     )
     
+    # Thêm wallet_id + role-specific ID vào response data
+    response_data = {**token_data}
+    
+    if user.role == "shipper":
+        from app.models.models import Shipper, Wallet
+        shipper = db.query(Shipper).filter(Shipper.user_id == user.user_id).first()
+        if shipper:
+            response_data["shipper_id"] = shipper.shipper_id
+            wallet = db.query(Wallet).filter(Wallet.owner_id == shipper.shipper_id).first()
+            if not wallet:
+                wallet = auth_repo.create_wallet(db, owner_id=shipper.shipper_id, owner_type="shipper")
+                db.commit()
+                db.refresh(wallet)
+            response_data["wallet_id"] = wallet.wallet_id
+    elif user.role == "nguoi_mua":
+        from app.models.models import Buyer, Wallet
+        buyer = db.query(Buyer).filter(Buyer.user_id == user.user_id).first()
+        if buyer:
+            response_data["buyer_id"] = buyer.buyer_id
+            wallet = db.query(Wallet).filter(Wallet.owner_id == buyer.buyer_id).first()
+            if not wallet:
+                wallet = auth_repo.create_wallet(db, owner_id=buyer.buyer_id, owner_type="buyer")
+                db.commit()
+                db.refresh(wallet)
+            response_data["wallet_id"] = wallet.wallet_id
+    elif user.role == "nguoi_ban":
+        from app.models.models import Stall, Wallet
+        stall = db.query(Stall).filter(Stall.user_id == user.user_id).first()
+        if stall:
+            response_data["stall_id"] = stall.stall_id
+            wallet = db.query(Wallet).filter(Wallet.owner_id == stall.stall_id).first()
+            response_data["wallet_id"] = wallet.wallet_id if wallet else None
+    
     return {
-        "data": token_data,
+        "data": response_data,
         "token": access_token
     }
 
@@ -274,7 +307,7 @@ def refresh_token(
         key="rt",
         value=new_refresh_token,
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
         max_age=7 * 24 * 60 * 60
     )

@@ -33,6 +33,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _error = 'Vui lòng nhập đầy đủ thông tin bắt buộc');
       return;
     }
+    if (_passwordCtrl.text.length < 6) {
+      setState(() => _error = 'Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+    if (_phoneCtrl.text.trim().length != 10 || !RegExp(r'^\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
+      setState(() => _error = 'Số điện thoại phải có đúng 10 chữ số');
+      return;
+    }
 
     setState(() {
       _loading = true;

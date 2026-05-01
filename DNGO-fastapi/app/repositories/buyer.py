@@ -570,14 +570,105 @@ def list_categories(
         {
             "ma_nhom_nguyen_lieu": r.category_id,
             "ten_nhom_nguyen_lieu": r.category_name,
+            "loai_nhom_nguyen_lieu": r.ingredient_type,
             "so_nguyen_lieu": ingredient_counts.get(r.category_id, 0)
         }
         for r in rows
     ]
-    
+
     return {
         "data": data,
         "meta": create_meta(pagination["page"], pagination["take"], total)
+    }
+
+
+def create_ingredient(db: Session, ten_nguyen_lieu: str, ma_nhom_nguyen_lieu: str) -> dict:
+    """Tạo nguyên liệu mới, tự sinh ingredient_id dạng NL001, NL002..."""
+    import re as _re
+
+    if not ten_nguyen_lieu:
+        raise ValueError("Tên nguyên liệu không được để trống")
+
+    category = db.query(Category).filter(Category.category_id == ma_nhom_nguyen_lieu).first()
+    if not category:
+        raise ValueError(f"Nhóm nguyên liệu '{ma_nhom_nguyen_lieu}' không tồn tại")
+
+    existing = db.query(Ingredient).filter(
+        Ingredient.ingredient_name == ten_nguyen_lieu,
+        Ingredient.category_id == ma_nhom_nguyen_lieu
+    ).first()
+    if existing:
+        raise ValueError(f"Nguyên liệu '{ten_nguyen_lieu}' đã tồn tại trong nhóm này")
+
+    existing_ids = [row.ingredient_id for row in db.query(Ingredient.ingredient_id).all()]
+    max_num = 0
+    for ing_id in existing_ids:
+        m = _re.search(r"\d+", ing_id or "")
+        if m:
+            max_num = max(max_num, int(m.group()))
+
+    new_id = f"NL{max_num + 1:03d}"
+    while db.query(Ingredient).filter(Ingredient.ingredient_id == new_id).first():
+        max_num += 1
+        new_id = f"NL{max_num + 1:03d}"
+
+    new_ing = Ingredient(
+        ingredient_id=new_id,
+        ingredient_name=ten_nguyen_lieu,
+        category_id=ma_nhom_nguyen_lieu,
+    )
+    db.add(new_ing)
+    db.commit()
+    db.refresh(new_ing)
+
+    return {
+        "ma_nguyen_lieu": new_ing.ingredient_id,
+        "ten_nguyen_lieu": new_ing.ingredient_name,
+        "don_vi": None,
+        "ma_nhom_nguyen_lieu": category.category_id,
+        "ten_nhom_nguyen_lieu": category.category_name,
+    }
+
+
+def create_category(db: Session, ten_nhom_nguyen_lieu: str, loai_nhom_nguyen_lieu: str) -> dict:
+    """Tạo nhóm nguyên liệu mới, tự sinh category_id dạng C01, C02..."""
+    import re as _re
+
+    if not ten_nhom_nguyen_lieu:
+        raise ValueError("Tên nhóm nguyên liệu không được để trống")
+
+    existing_name = db.query(Category).filter(
+        Category.category_name == ten_nhom_nguyen_lieu
+    ).first()
+    if existing_name:
+        raise ValueError(f"Nhóm '{ten_nhom_nguyen_lieu}' đã tồn tại")
+
+    existing_ids = [row.category_id for row in db.query(Category.category_id).all()]
+    max_num = 0
+    for cat_id in existing_ids:
+        m = _re.search(r"\d+", cat_id or "")
+        if m:
+            max_num = max(max_num, int(m.group()))
+
+    new_id = f"C{max_num + 1:02d}"
+    while db.query(Category).filter(Category.category_id == new_id).first():
+        max_num += 1
+        new_id = f"C{max_num + 1:02d}"
+
+    new_cat = Category(
+        category_id=new_id,
+        category_name=ten_nhom_nguyen_lieu,
+        ingredient_type=loai_nhom_nguyen_lieu,
+    )
+    db.add(new_cat)
+    db.commit()
+    db.refresh(new_cat)
+
+    return {
+        "ma_nhom_nguyen_lieu": new_cat.category_id,
+        "ten_nhom_nguyen_lieu": new_cat.category_name,
+        "loai_nhom_nguyen_lieu": new_cat.ingredient_type,
+        "so_nguyen_lieu": 0,
     }
 
 

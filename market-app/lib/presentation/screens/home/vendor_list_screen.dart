@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:market_app/core/constants/app_colors.dart';
@@ -8,10 +9,8 @@ import 'package:market_app/presentation/bloc/merchant/merchant_state.dart';
 import 'package:market_app/presentation/widgets/common/market_app_bar.dart';
 import 'package:market_app/presentation/widgets/common/market_bottom_nav_bar.dart';
 import 'package:market_app/injection_container.dart';
-import 'add_vendor_screen.dart';
-import 'tax_receipt_screen.dart';
-import 'account_history_screen.dart';
 import 'approve_vendor_screen.dart';
+import 'tax_receipt_screen.dart';
 
 class VendorListScreen extends StatefulWidget {
   final MarketNavItem currentNav;
@@ -27,44 +26,43 @@ class VendorListScreen extends StatefulWidget {
   State<VendorListScreen> createState() => _VendorListScreenState();
 }
 
-class _VendorListScreenState extends State<VendorListScreen> with SingleTickerProviderStateMixin {
+class _VendorListScreenState extends State<VendorListScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _searchCtrl = TextEditingController();
   String _filterStatus = 'Tất cả';
   final List<String> _filterOptions = ['Tất cả', 'Hoạt động', 'Tạm nghỉ'];
   int _currentPage = 1;
-  int _pendingPage = 1;
   late MerchantBloc _merchantBloc;
+  Timer? _debounce;
+  int _pendingCount = 0;
 
   @override
   void initState() {
     super.initState();
+    _merchantBloc = sl<MerchantBloc>()
+      ..add(const GetMerchantsEvent())
+      ..add(const GetPendingMerchantsEvent());
     _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(_onTabChanged);
-    _merchantBloc = sl<MerchantBloc>()..add(const GetMerchantsEvent());
-  }
-
-  void _onTabChanged() {
-    if (_tabController.indexIsChanging) return;
-    if (_tabController.index == 0) {
-      _triggerFetch(page: _currentPage);
-    } else {
-      _merchantBloc.add(GetPendingMerchantsEvent(page: _pendingPage));
-    }
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) return;
+      if (_tabController.index == 1) {
+        _merchantBloc.add(const GetPendingMerchantsEvent());
+      } else {
+        _triggerFetch(page: _currentPage);
+      }
+    });
   }
 
   void _onSearchChanged(String query) {
-    if (_tabController.index == 1) return;
-    _currentPage = 1;
-    _triggerFetch(page: 1);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _currentPage = 1;
+      _triggerFetch(page: 1);
+    });
   }
 
   void _triggerFetch({int page = 1}) {
-    if (_tabController.index == 1) {
-      _merchantBloc.add(GetPendingMerchantsEvent(page: page));
-      return;
-    }
-
     String? statusParam;
     if (_filterStatus == 'Hoạt động') statusParam = 'hoat_dong';
     if (_filterStatus == 'Tạm nghỉ') statusParam = 'tam_nghi';
@@ -78,8 +76,9 @@ class _VendorListScreenState extends State<VendorListScreen> with SingleTickerPr
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _debounce?.cancel();
     _searchCtrl.dispose();
+    _tabController.dispose();
     _merchantBloc.close();
     super.dispose();
   }
@@ -88,7 +87,13 @@ class _VendorListScreenState extends State<VendorListScreen> with SingleTickerPr
   Widget build(BuildContext context) {
     return BlocProvider.value(
       value: _merchantBloc,
-      child: Scaffold(
+      child: BlocListener<MerchantBloc, MerchantState>(
+        listener: (context, state) {
+          if (state is PendingMerchantsLoaded) {
+            setState(() => _pendingCount = state.merchants.length);
+          }
+        },
+        child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: AppColors.primary,
@@ -101,71 +106,59 @@ class _VendorListScreenState extends State<VendorListScreen> with SingleTickerPr
               fontSize: 18,
             ),
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.history_edu, color: Colors.white),
-              tooltip: 'Lịch sử tạo tài khoản',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AccountHistoryScreen()),
-                );
-              },
-            ),
-          ],
           bottom: TabBar(
             controller: _tabController,
             indicatorColor: Colors.white,
             indicatorWeight: 3,
             labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            tabs: const [
-              Tab(text: 'Quản lý sạp'),
-              Tab(text: 'Chờ tạo sạp'),
+            unselectedLabelColor: Colors.white60,
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+            tabs: [
+              const Tab(text: 'Tiểu thương'),
+              Tab(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Chờ duyệt'),
+                    if (_pendingCount > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '$_pendingCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
         ),
         body: TabBarView(
           controller: _tabController,
-          physics: const NeverScrollableScrollPhysics(), // prevents bloc race condition on swipe
           children: [
             _buildActiveTab(context),
             _buildPendingTab(context),
           ],
         ),
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-              child: SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: () => _showAddVendorSheet(),
-                  icon: const Icon(Icons.add, size: 20),
-                  label: const Text('Thêm Tiểu Thương Mới',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
-              ),
-            ),
-            MarketBottomNavBar(
-              currentItem: widget.currentNav,
-              onTap: widget.onNavTap,
-            ),
-          ],
+        bottomNavigationBar: MarketBottomNavBar(
+          currentItem: widget.currentNav,
+          onTap: widget.onNavTap,
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildActiveTab(BuildContext context) {
@@ -314,79 +307,58 @@ class _VendorListScreenState extends State<VendorListScreen> with SingleTickerPr
     );
   }
 
+
+
+
   Widget _buildPendingTab(BuildContext context) {
     return BlocBuilder<MerchantBloc, MerchantState>(
-      buildWhen: (prev, curr) => curr is PendingMerchantsLoading || curr is PendingMerchantsLoaded || curr is MerchantError,
+      buildWhen: (_, curr) =>
+          curr is PendingMerchantsLoading ||
+          curr is PendingMerchantsLoaded ||
+          curr is MerchantError,
       builder: (context, state) {
-        if (state is PendingMerchantsLoading || state is MerchantLoading) {
+        if (state is PendingMerchantsLoading) {
           return const Center(child: CircularProgressIndicator());
-        } else if (state is MerchantError) {
-          return Center(child: Text(state.message));
-        } else if (state is PendingMerchantsLoaded) {
+        }
+        if (state is PendingMerchantsLoaded) {
           final merchants = state.merchants;
-          final meta = state.meta;
           if (merchants.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.person_add_disabled, size: 48, color: AppColors.textHint),
+                  Icon(Icons.check_circle_outline, size: 48, color: AppColors.textHint),
                   SizedBox(height: 8),
-                  Text('Không có tiểu thương nào chờ duyệt.', style: TextStyle(color: AppColors.textSecondary)),
+                  Text('Không có tiểu thương chờ duyệt',
+                      style: TextStyle(color: AppColors.textSecondary)),
                 ],
               ),
             );
           }
-          return Column(
-            children: [
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                  itemCount: merchants.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) => _VendorCard(
-                    merchant: merchants[i],
-                    onTap: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ApproveVendorScreen(merchant: merchants[i]),
-                        ),
-                      );
-                      if (result == true) {
-                        _triggerFetch(page: _pendingPage);
-                      }
-                    },
+          return ListView.separated(
+            padding: const EdgeInsets.all(14),
+            itemCount: merchants.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, i) => _VendorCard(
+              merchant: merchants[i],
+              onTap: () async {
+                final approved = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ApproveVendorScreen(merchant: merchants[i]),
                   ),
-                ),
-              ),
-              if (meta.totalPages > 1)
-                _PaginationBar(
-                  currentPage: _pendingPage,
-                  totalPages: meta.totalPages,
-                  total: meta.total,
-                  onPrev: _pendingPage > 1
-                      ? () {
-                          setState(() => _pendingPage--);
-                          _triggerFetch(page: _pendingPage);
-                        }
-                      : null,
-                  onNext: _pendingPage < meta.totalPages
-                      ? () {
-                          setState(() => _pendingPage++);
-                          _triggerFetch(page: _pendingPage);
-                        }
-                      : null,
-                ),
-              const SizedBox(height: 8),
-            ],
+                );
+                if (approved == true) {
+                  _merchantBloc.add(const GetPendingMerchantsEvent());
+                }
+              },
+            ),
           );
         }
         return const SizedBox.shrink();
       },
     );
   }
-
 
   void _showFilterSheet(BuildContext context) {
     showDialog(
@@ -478,8 +450,6 @@ class _VendorListScreenState extends State<VendorListScreen> with SingleTickerPr
             if (v.sdt != null)
               _DetailRow(icon: Icons.phone_android,
                   label: 'Tài khoản (SĐT)', value: v.sdt!),
-            _DetailRow(icon: Icons.password_outlined,
-                label: 'Mật khẩu', value: '123456 (Mặc định)'),
             if (v.ngayTao != null)
               _DetailRow(icon: Icons.calendar_today,
                   label: 'Ngày tạo', value: v.ngayTao != null ? v.ngayTao!.split('-').reversed.join('/') : ''),
@@ -514,18 +484,6 @@ class _VendorListScreenState extends State<VendorListScreen> with SingleTickerPr
             ]),
             const SizedBox(height: 8),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddVendorSheet() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => AddVendorScreen(
-          currentNav: widget.currentNav,
-          onNavTap: widget.onNavTap,
         ),
       ),
     );
@@ -601,7 +559,7 @@ class _VendorCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
-                  'Đã nộp thuế',
+                  'Đã nộp tiền',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,

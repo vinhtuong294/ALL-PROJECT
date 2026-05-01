@@ -456,4 +456,124 @@ class WalletRepository:
             "created_at": req.created_at
         }
 
+    # ==================== PLATFORM CONVENIENCE ====================
+
+    def get_platform_wallet(self, db: Session) -> "Wallet":
+        """Tìm ví sàn, trả về 404 nếu chưa tồn tại."""
+        from app.models.models import Wallet as WalletModel
+        wallet = db.query(WalletModel).filter(
+            WalletModel.owner_id == "PLATFORM",
+            WalletModel.owner_type == "platform"
+        ).first()
+        if not wallet:
+            raise HTTPException(status_code=404, detail="Ví sàn chưa được khởi tạo")
+        return wallet
+
+    def get_platform_balance(
+        self,
+        db: Session,
+        filter_type: Optional[str] = None,
+        from_date: Optional[date] = None,
+        to_date: Optional[date] = None,
+    ) -> dict:
+        """Admin xem ví sàn mà không cần biết wallet_id."""
+        wallet = self.get_platform_wallet(db)
+        res = self._platform_balance(db, wallet, filter_type, from_date, to_date)
+        from app.models.models import WithdrawalRequest
+        tong_dang_cho = db.query(func.coalesce(func.sum(WithdrawalRequest.amount), 0)).filter(
+            WithdrawalRequest.wallet_id == wallet.wallet_id,
+            WithdrawalRequest.status == "chờ_duyệt"
+        ).scalar()
+        res["tien_dang_cho_rut"] = tong_dang_cho
+        res["so_du_kha_dung"] = res["so_du"] - tong_dang_cho
+        return res
+
+    # ==================== WITHDRAWAL MANAGEMENT ====================
+
+    def list_withdrawal_requests(
+        self,
+        db: Session,
+        status: Optional[str] = None,
+        owner_type: Optional[str] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> dict:
+        """Admin: danh sách tất cả yêu cầu rút tiền."""
+        from app.models.models import WithdrawalRequest, Wallet as WalletModel, User, Stall, Shipper
+
+        offset = (page - 1) * limit
+        query = db.query(WithdrawalRequest, WalletModel).join(
+            WalletModel, WalletModel.wallet_id == WithdrawalRequest.wallet_id
+        )
+
+        if status and status != "tat_ca":
+            query = query.filter(WithdrawalRequest.status == status)
+        if owner_type and owner_type != "tat_ca":
+            query = query.filter(WalletModel.owner_type == owner_type)
+
+        total = query.count()
+        rows = query.order_by(WithdrawalRequest.created_at.desc()).offset(offset).limit(limit).all()
+
+        data = []
+        for req, wallet in rows:
+            owner_name = None
+            if wallet.owner_type == "seller":
+                stall = db.query(Stall).filter(Stall.stall_id == wallet.owner_id).first()
+                if stall:
+                    u = db.query(User).filter(User.user_id == stall.user_id).first()
+                    owner_name = u.user_name if u else None
+            elif wallet.owner_type == "shipper":
+                shipper = db.query(Shipper).filter(Shipper.shipper_id == wallet.owner_id).first()
+                if shipper:
+                    u = db.query(User).filter(User.user_id == shipper.user_id).first()
+                    owner_name = u.user_name if u else None
+            elif wallet.owner_type == "platform":
+                owner_name = "Sàn DNGO"
+
+            data.append({
+                "id": req.id,
+                "wallet_id": req.wallet_id,
+                "owner_type": wallet.owner_type,
+                "owner_name": owner_name,
+                "amount": req.amount,
+                "bank_bin": req.bank_bin,
+                "bank_account_no": req.bank_account_no,
+                "account_name": req.account_name,
+                "status": req.status,
+                "note": req.note,
+                "created_at": req.created_at,
+            })
+
+        return {
+            "success": True,
+            "data": data,
+            "meta": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": max(1, (total + limit - 1) // limit)
+            }
+        }
+
+    def process_withdrawal(
+        self,
+        db: Session,
+        request_id: int,
+        approved: bool,
+        note: Optional[str] = None,
+    ) -> dict:
+        """Admin: duyệt hoặc từ chối một yêu cầu rút tiền."""
+        from app.models.models import WithdrawalRequest
+        req = db.query(WithdrawalRequest).filter(WithdrawalRequest.id == request_id).first()
+        if not req:
+            raise HTTPException(404, "Không tìm thấy yêu cầu rút tiền")
+        if req.status != "chờ_duyệt":
+            raise HTTPException(400, f"Yêu cầu này đã được xử lý rồi (trạng thái: {req.status})")
+        req.status = "da_duyet" if approved else "tu_choi"
+        if note:
+            req.note = note
+        db.commit()
+        return {"success": True, "id": req.id, "status": req.status}
+
+
 wallet_repo = WalletRepository()

@@ -1,5 +1,3 @@
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import update
@@ -9,8 +7,6 @@ from app.repositories.payment import _mark_paid
 from app.database import get_db
 from app.models import Payment, PaymentStatus
 from app.utils.vnpay import verify_signature, verify_signature_debug
-
-from app.database import get_db
 from app.schemas.payment import (
     VNPayCheckoutRequest,
     VNPayCheckoutResponse,

@@ -57,7 +57,7 @@ class MarketBottomNavBar extends StatelessWidget {
               _NavItem(
                 icon: Icons.receipt_outlined,
                 activeIcon: Icons.receipt,
-                label: 'Thuế',
+                label: 'Thu tiền',
                 isActive: currentItem == MarketNavItem.tax,
                 onTap: () => onTap(MarketNavItem.tax),
               ),

@@ -118,7 +118,7 @@ class _ApproveVendorScreenState extends State<ApproveVendorScreen> {
                         _buildLabel('Loại hàng hóa *'),
                         _isLoadingCategories ? const LinearProgressIndicator() : _buildDropdown(),
                         const SizedBox(height: 14),
-                        _buildLabel('Tiền thuế mặc định/tháng *'),
+                        _buildLabel('Tiền gian hàng mặc định/tháng *'),
                         _buildTextField(
                           controller: _taxCtrl,
                           hintText: '500000',
@@ -169,6 +169,26 @@ class _ApproveVendorScreenState extends State<ApproveVendorScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Xem tab "Bản đồ chợ" để xác định vị trí. X = số cột từ trái sang (bắt đầu từ 0), Y = số hàng từ trên xuống (bắt đầu từ 0).',
+                                  style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -188,6 +208,24 @@ class _ApproveVendorScreenState extends State<ApproveVendorScreen> {
                     final isLoading = state is ApproveMerchantLoading;
                     return ElevatedButton.icon(
                       onPressed: isLoading ? null : () {
+                        if (_isLoadingCategories) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Đang tải danh mục, vui lòng đợi...'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
+                        if (_selectedGoodsType == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Vui lòng chọn loại hàng hóa'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
                         if (_formKey.currentState!.validate()) {
                           _merchantBloc.add(RegisterStallEvent(
                             userId: widget.merchant.userId,
@@ -195,6 +233,7 @@ class _ApproveVendorScreenState extends State<ApproveVendorScreen> {
                             loaiHangHoa: _selectedGoodsType!,
                             gridCol: int.tryParse(_gridColCtrl.text) ?? 0,
                             gridRow: int.tryParse(_gridRowCtrl.text) ?? 0,
+                            tienThueMacDinh: double.tryParse(_taxCtrl.text) ?? 500000,
                           ));
                         }
                       },

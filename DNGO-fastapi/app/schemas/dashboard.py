@@ -25,7 +25,6 @@ class StationInfo(BaseModel):
     stall_name: str
     status: str # mo_cua / dong_cua
     user_name: str
-    phone: str
     category_ma: str
 
 class StatusLogInfo(BaseModel):

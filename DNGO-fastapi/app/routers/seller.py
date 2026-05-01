@@ -209,7 +209,6 @@ def get_notifications(
         Notification.is_read == False
     ).count()
     
-    import json
     return {
         "success": True,
         "unread": unread,

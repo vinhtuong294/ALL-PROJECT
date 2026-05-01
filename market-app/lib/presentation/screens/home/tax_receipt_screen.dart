@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import 'package:market_app/core/constants/app_colors.dart';
@@ -13,12 +14,14 @@ class TaxReceiptScreen extends StatefulWidget {
   final StallFeeDetailModel? detail;
   final String? feeId;
   final String paymentMethod;
+  final String? marketName;
 
   const TaxReceiptScreen({
     super.key,
     this.detail,
     this.feeId,
     this.paymentMethod = 'Tiền mặt',
+    this.marketName,
   }) : assert(detail != null || feeId != null);
 
   @override
@@ -44,6 +47,29 @@ class _TaxReceiptScreenState extends State<TaxReceiptScreen> {
   void dispose() {
     _taxBloc.close();
     super.dispose();
+  }
+
+  void _shareReceipt(StallFeeDetailModel detail) {
+    final marketName = (widget.marketName ?? 'CHỢ BẮC MỸ AN').toUpperCase();
+    final text = '''
+$marketName — Hóa Đơn Thu Tiền Gian Hàng
+----------------------------------------
+Mã phí:       ${detail.feeId}
+Gian hàng:    ${detail.stallName} (${detail.stallId})
+Tiểu thương:  ${detail.userName}
+Tháng:        ${detail.month}
+Số tiền:      ${_fmt.format(detail.fee.toInt())}đ
+Thanh toán:   ${widget.paymentMethod}
+Trạng thái:   Đã nộp
+''';
+    Clipboard.setData(ClipboardData(text: text.trim()));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Đã sao chép hóa đơn vào clipboard'),
+        backgroundColor: AppColors.primary,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -82,11 +108,11 @@ class _TaxReceiptScreenState extends State<TaxReceiptScreen> {
             return Scaffold(
               backgroundColor: AppColors.background,
               appBar: MarketAppBar(
-                title: 'Hóa Đơn Thu Thuế',
+                title: 'Hóa Đơn Thu Tiền',
                 showBack: true,
                 actions: [
                   IconButton(
-                    onPressed: () {},
+                    onPressed: () => _shareReceipt(detail),
                     icon: const Icon(Icons.share_outlined, color: Colors.white),
                   ),
                 ],
@@ -119,13 +145,13 @@ class _TaxReceiptScreenState extends State<TaxReceiptScreen> {
                           child: const Icon(Icons.home, color: AppColors.primary, size: 32),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'CHỢ BẮC MỸ AN',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                        Text(
+                          (widget.marketName ?? 'CHỢ BẮC MỸ AN').toUpperCase(),
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5),
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Hệ thống quản lý thuế gian hàng',
+                          'Hệ thống quản lý tiền gian hàng',
                           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
                         const SizedBox(height: 24),
@@ -138,7 +164,7 @@ class _TaxReceiptScreenState extends State<TaxReceiptScreen> {
                           child: Column(
                             children: [
                               const Text(
-                                'HÓA ĐƠN THU THUẾ',
+                                'HÓA ĐƠN THU TIỀN',
                                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                               ),
                               const SizedBox(height: 4),
@@ -157,7 +183,7 @@ class _TaxReceiptScreenState extends State<TaxReceiptScreen> {
                         _buildReceiptRow('Địa chỉ:', detail.address),
                         _buildReceiptRow('Ngày thu:', today),
                         const SizedBox(height: 32),
-                        _buildSectionTitle('Chi tiết thu thuế'),
+                        _buildSectionTitle('Chi tiết thu tiền'),
                         const SizedBox(height: 12),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -167,7 +193,7 @@ class _TaxReceiptScreenState extends State<TaxReceiptScreen> {
                           ],
                         ),
                         const Divider(height: 24),
-                        _buildReceiptRow('Thuế gian hàng tháng ${detail.month}', '${_fmt.format(detail.fee.toInt())} VNĐ', isLabelSmall: true),
+                        _buildReceiptRow('Tiền gian hàng tháng ${detail.month}', '${_fmt.format(detail.fee.toInt())} VNĐ', isLabelSmall: true),
                         _buildReceiptRow('Phí dịch vụ', '0 VNĐ', isLabelSmall: true),
                         const SizedBox(height: 12),
                         Container(
@@ -238,7 +264,7 @@ class _TaxReceiptScreenState extends State<TaxReceiptScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: const Text(
-                            'Hóa đơn này là bằng chứng xác nhận đã nộp thuế gian hàng',
+                            'Hóa đơn này là bằng chứng xác nhận đã nộp tiền gian hàng',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 12, color: Color(0xFFB45309), fontWeight: FontWeight.w500),
                           ),

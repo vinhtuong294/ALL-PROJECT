@@ -38,20 +38,8 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
           limit: event.limit,
         );
         if (response.success) {
-          // --- FRONTEND WORKAROUND FOR LIVE API BUG ---
-          // The current live API /pending-sellers incorrectly returns users who already have stalls
-          // To fix the UI, we fetch the first 100 real stall owners and filter them out.
-          final allMerchantsResp = await repository.getMerchants(limit: 100);
-          final Set<String> stallOwnerIds = {};
-          if (allMerchantsResp.success) {
-            for (var m in allMerchantsResp.data) {
-              if (m.userId.isNotEmpty) stallOwnerIds.add(m.userId);
-            }
-          }
-          final filteredMerchants = response.data.where((m) => !stallOwnerIds.contains(m.userId)).toList();
-          
           emit(PendingMerchantsLoaded(
-            merchants: filteredMerchants,
+            merchants: response.data,
             meta: response.meta,
           ));
         } else {
@@ -80,11 +68,11 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
       try {
         final response = await repository.approveMerchant(event.userId);
         if (response.success) {
-          emit(ApproveMerchantSuccess(response.message ?? 'Duyệt thành công'));
+          emit(ApproveMerchantSuccess(response.message));
           // Trigger refresh
           add(const GetPendingMerchantsEvent());
         } else {
-          emit(ApproveMerchantError(response.message ?? 'Duyệt thất bại'));
+          emit(ApproveMerchantError(response.message));
         }
       } catch (e) {
         emit(ApproveMerchantError(e.toString()));
@@ -130,17 +118,17 @@ class MerchantBloc extends Bloc<MerchantEvent, MerchantState> {
         final data = {
           'ma_nguoi_dung': event.userId,
           'ten_gian_hang': event.tenGianHang,
-          'stall_location': event.loaiHangHoa, // Gửi loại hàng hóa lên API vì db stall_location là loại hàng hóa
+          'stall_location': event.loaiHangHoa,
           'grid_col': event.gridCol,
           'grid_row': event.gridRow,
+          'tien_thue_mac_dinh': event.tienThueMacDinh,
         };
         final response = await repository.registerStall(data);
         if (response.success) {
-          emit(ApproveMerchantSuccess(response.message ?? 'Tạo gian hàng thành công'));
-          // Trigger refresh list
+          emit(ApproveMerchantSuccess(response.message));
           add(const GetPendingMerchantsEvent());
         } else {
-          emit(ApproveMerchantError(response.message ?? 'Tạo gian hàng thất bại'));
+          emit(ApproveMerchantError(response.message));
         }
       } on DioException catch (e) {
         final errData = e.response?.data;

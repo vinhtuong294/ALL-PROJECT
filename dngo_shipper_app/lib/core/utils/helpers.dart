@@ -42,9 +42,11 @@ String statusLabel(String? status) {
   switch (status) {
     case 'cho_xac_nhan': return 'Chờ xác nhận';
     case 'da_xac_nhan': return 'Đã xác nhận';
+    case 'cho_shipper': return 'Đã nhận đơn';
     case 'dang_lay_hang': return 'Đang lấy hàng';
     case 'dang_giao': return 'Đang giao hàng';
     case 'da_giao': return 'Đã giao';
+    case 'hoan_thanh': return 'Hoàn thành';
     case 'giao_that_bai': return 'Giao thất bại';
     case 'da_huy': return 'Đã hủy';
     default: return status ?? 'N/A';

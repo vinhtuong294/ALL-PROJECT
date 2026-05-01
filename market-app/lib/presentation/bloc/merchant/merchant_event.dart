@@ -88,6 +88,7 @@ class RegisterStallEvent extends MerchantEvent {
   final String loaiHangHoa;
   final int gridCol;
   final int gridRow;
+  final double tienThueMacDinh;
 
   const RegisterStallEvent({
     required this.userId,
@@ -95,14 +96,9 @@ class RegisterStallEvent extends MerchantEvent {
     required this.loaiHangHoa,
     this.gridCol = 0,
     this.gridRow = 0,
+    this.tienThueMacDinh = 500000,
   });
 
   @override
-  List<Object?> get props => [
-        userId,
-        tenGianHang,
-        loaiHangHoa,
-        gridCol,
-        gridRow,
-      ];
+  List<Object?> get props => [userId, tenGianHang, loaiHangHoa, gridCol, gridRow, tienThueMacDinh];
 }

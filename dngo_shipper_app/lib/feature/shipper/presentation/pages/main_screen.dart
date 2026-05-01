@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/orders_tab.dart';
-import 'tabs/map_tab.dart';
 import 'tabs/account_tab.dart';
-import 'market_map_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final int initialIndex;
@@ -15,87 +13,126 @@ class MainScreen extends StatefulWidget {
 
 class MainScreenState extends State<MainScreen> {
   late int _currentIndex;
+  final _accountTabKey = GlobalKey<AccountTabState>();
 
-  final List<Widget> _pages = [
-    const HomeTab(),
-    const OrdersTab(),
-    const MapTab(),
-    const AccountTab(),
-  ];
+  late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    _pages = [
+      const HomeTab(),
+      const OrdersTab(),
+      AccountTab(key: _accountTabKey),
+    ];
   }
 
-  /// Public method so child tabs can switch tabs
   void switchToTab(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+    setState(() => _currentIndex = index);
+    if (index == 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _accountTabKey.currentState?.refreshData();
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_currentIndex],
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Open Detailed Market Map
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const MarketMapScreen()),
-          );
-        },
-        backgroundColor: Colors.white,
-        elevation: 4,
-        shape: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Image.asset(
-            'assets/img/logo.png',
-            errorBuilder: (c, e, s) => const Icon(Icons.map, color: Color(0xFF4CAF50)),
-          ),
-        ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
+      bottomNavigationBar: _BottomNav(
+        currentIndex: _currentIndex,
+        onTap: switchToTab,
       ),
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 8,
-        elevation: 8,
+    );
+  }
+}
+
+class _BottomNav extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  const _BottomNav({required this.currentIndex, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
         child: SizedBox(
           height: 60,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(Icons.home_filled, 'Trang chủ', 0),
-              _buildNavItem(Icons.list_alt, 'Đơn hàng', 1),
-              const SizedBox(width: 48),
-              _buildNavItem(Icons.location_on_outlined, 'Bản đồ', 2),
-              _buildNavItem(Icons.person_outline, 'Tài khoản', 3),
+              _NavItem(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Trang chủ', index: 0, current: currentIndex, onTap: onTap),
+              _NavItem(icon: Icons.assignment_outlined, activeIcon: Icons.assignment_rounded, label: 'Đơn hàng', index: 1, current: currentIndex, onTap: onTap),
+              _NavItem(icon: Icons.person_outline_rounded, activeIcon: Icons.person_rounded, label: 'Tài khoản', index: 2, current: currentIndex, onTap: onTap),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildNavItem(IconData icon, String label, int index) {
-    final isSelected = _currentIndex == index;
-    final color = isSelected ? const Color(0xFF4CAF50) : Colors.grey;
-    return GestureDetector(
-      onTap: () => switchToTab(index),
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 4),
-          Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
-        ],
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final int index;
+  final int current;
+  final ValueChanged<int> onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.index,
+    required this.current,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = current == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onTap(index),
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                isSelected ? activeIcon : icon,
+                key: ValueKey(isSelected),
+                color: isSelected ? const Color(0xFF00B40F) : const Color(0xFF9CA3AF),
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? const Color(0xFF00B40F) : const Color(0xFF9CA3AF),
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -61,12 +61,10 @@ class TaxBloc extends Bloc<TaxEvent, TaxState> {
 
   String _handleError(dynamic e) {
     if (e is DioException) {
-      if (e.response?.statusCode == 404) {
-        return 'Không tìm thấy dữ liệu trên hệ thống (Lỗi 404). Vui lòng kiểm tra lại mã hóa đơn.';
-      }
-      if (e.type == DioExceptionType.connectionTimeout) {
-        return 'Kết nối máy chủ quá hạn. Vui lòng kiểm tra mạng.';
-      }
+      final status = e.response?.statusCode;
+      if (status == 401) return e.message ?? 'Phiên đăng nhập hết hạn. Vui lòng đăng xuất và đăng nhập lại.';
+      if (status == 404) return 'Không tìm thấy dữ liệu (Lỗi 404). Vui lòng kiểm tra lại.';
+      if (e.type == DioExceptionType.connectionTimeout) return 'Kết nối máy chủ quá hạn. Vui lòng kiểm tra mạng.';
       return e.message ?? 'Lỗi kết nối máy chủ';
     }
     return e.toString();

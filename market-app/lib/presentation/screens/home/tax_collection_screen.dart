@@ -115,7 +115,7 @@ class _TaxCollectionScreenState extends State<TaxCollectionScreen> {
               Row(children: [
                 const Icon(Icons.filter_list, color: AppColors.primary, size: 20),
                 const SizedBox(width: 8),
-                const Text('Lọc trạng thái đóng thuế',
+                const Text('Lọc trạng thái đóng tiền',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 GestureDetector(
@@ -153,7 +153,7 @@ class _TaxCollectionScreenState extends State<TaxCollectionScreen> {
       value: _taxBloc,
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: const MarketAppBar(title: 'Thu Thuế Gian Hàng', showBack: true),
+        appBar: const MarketAppBar(title: 'Thu Tiền Gian Hàng', showBack: true),
         body: Column(
           children: [
             // Header: month + filter
@@ -239,7 +239,7 @@ class _TaxCollectionScreenState extends State<TaxCollectionScreen> {
                             const SizedBox(height: 8),
                             Text(
                               _filterStatus == 'Tất cả'
-                                  ? 'Chưa có dữ liệu thu thuế tháng này'
+                                  ? 'Chưa có dữ liệu thu tiền tháng này'
                                   : 'Không có gian hàng "$_filterStatus"',
                               style: const TextStyle(color: AppColors.textSecondary),
                             ),
@@ -340,7 +340,7 @@ class _TaxCollectionScreenState extends State<TaxCollectionScreen> {
                             );
                           },
                           icon: const Icon(Icons.history, size: 20),
-                          label: const Text('Lịch sử thu thuế', 
+                          label: const Text('Lịch sử thu tiền', 
                             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,

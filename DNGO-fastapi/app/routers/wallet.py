@@ -1,9 +1,11 @@
 from datetime import date
+from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.middlewares.auth import get_current_user, AuthUser
+from app.middlewares.auth import get_current_user, allow, AuthUser
 from app.repositories.wallet import wallet_repo
 from app.schemas.wallet import WalletBalanceResponse, WithdrawRequestBody
 
@@ -99,3 +101,69 @@ def request_withdrawal(
         return {"success": True, "message": "Đã tạo yêu cầu rút tiền thành công", "data": result}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# ==================== ADMIN: VÍ SÀN & RÚT TIỀN ====================
+
+class ProcessWithdrawalRequest(BaseModel):
+    approved: bool
+    note: Optional[str] = None
+
+
+@router.get("/platform/balance")
+def get_platform_wallet_balance(
+    filter_type: Optional[str] = Query(None, description="hom_nay | tuan_nay | thang_nay | khoang"),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("admin")),
+):
+    """Admin xem số dư và lịch sử ví sàn (không cần wallet_id)."""
+    _validate(filter_type, from_date, to_date)
+    return wallet_repo.get_platform_balance(db, filter_type=filter_type, from_date=from_date, to_date=to_date)
+
+
+@router.post("/platform/withdraw")
+def platform_withdraw(
+    body: WithdrawRequestBody,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("admin")),
+):
+    """Admin tạo yêu cầu rút tiền từ ví sàn."""
+    wallet = wallet_repo.get_platform_wallet(db)
+    try:
+        result = wallet_repo.request_withdraw(
+            db=db,
+            wallet_id=wallet.wallet_id,
+            amount=body.amount,
+            bank_bin=body.bank_bin,
+            bank_account_no=body.bank_account_no,
+            account_name=body.account_name,
+        )
+        return {"success": True, "message": "Đã tạo yêu cầu rút tiền thành công", "data": result}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/admin/withdrawals")
+def admin_list_withdrawals(
+    status: Optional[str] = Query(None, description="chờ_duyệt | da_duyet | tu_choi | tat_ca"),
+    owner_type: Optional[str] = Query(None, description="seller | shipper | platform | tat_ca"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("admin")),
+):
+    """Admin xem tất cả yêu cầu rút tiền từ seller, shipper và sàn."""
+    return wallet_repo.list_withdrawal_requests(db, status=status, owner_type=owner_type, page=page, limit=limit)
+
+
+@router.patch("/admin/withdrawals/{request_id}")
+def admin_process_withdrawal(
+    request_id: int,
+    body: ProcessWithdrawalRequest,
+    db: Session = Depends(get_db),
+    current_user: AuthUser = Depends(allow("admin")),
+):
+    """Admin duyệt (approved=true) hoặc từ chối (approved=false) một yêu cầu rút tiền."""
+    return wallet_repo.process_withdrawal(db, request_id=request_id, approved=body.approved, note=body.note)

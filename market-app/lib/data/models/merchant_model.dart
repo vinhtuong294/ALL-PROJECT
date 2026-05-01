@@ -64,7 +64,11 @@ class MerchantModel {
   };
 
   String get displayName => userName ?? 'Chưa cập nhật';
-  String get initial => displayName.isNotEmpty ? displayName.trim().split(' ').last[0].toUpperCase() : '?';
+  String get initial {
+    final trimmed = displayName.trim();
+    if (trimmed.isEmpty) return '?';
+    return trimmed.split(' ').last[0].toUpperCase();
+  }
   bool get isActive => status == 'hoat_dong' || status == 'mo_cua';
   bool get isTaxPaid => feeStatus == 'da_nop';
   bool get isPending => approvalStatus == 0;

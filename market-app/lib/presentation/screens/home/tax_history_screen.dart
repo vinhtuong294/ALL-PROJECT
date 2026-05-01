@@ -81,7 +81,7 @@ class _TaxHistoryScreenState extends State<TaxHistoryScreen> {
       value: _taxBloc,
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: const MarketAppBar(title: 'Lịch Sử Thu Thuế', showBack: true),
+        appBar: const MarketAppBar(title: 'Lịch Sử Thu Tiền', showBack: true),
         body: Column(
           children: [
             // Search & Filter Section
@@ -244,7 +244,8 @@ class _TaxHistoryScreenState extends State<TaxHistoryScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Chọn tháng / năm', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
         content: SizedBox(
-          height: 200,
+          height: 260,
+          width: 300,
           child: YearMonth(
             initial: _selectedMonth,
             onChanged: (d) => picked = d,
@@ -273,7 +274,7 @@ class _TaxHistoryScreenState extends State<TaxHistoryScreen> {
   }
 }
 
-// ─── Simple month picker (Copied from TaxCollectionScreen for self-containment)
+// ─── Simple month picker ─────────────────────────────────────────────────────
 class YearMonth extends StatefulWidget {
   final DateTime initial;
   final ValueChanged<DateTime> onChanged;
@@ -295,61 +296,84 @@ class _YearMonthState extends State<YearMonth> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconButton(
-              onPressed: () {
-                setState(() => _year--);
-                widget.onChanged(DateTime(_year, _month));
-              },
-              icon: const Icon(Icons.chevron_left)),
-          Text('$_year',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          IconButton(
-              onPressed: () {
-                if (_year < DateTime.now().year) {
-                  setState(() => _year++);
+    final now = DateTime.now();
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Year selector
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            IconButton(
+                onPressed: () {
+                  setState(() => _year--);
                   widget.onChanged(DateTime(_year, _month));
-                }
-              },
-              icon: const Icon(Icons.chevron_right)),
-        ]),
-        const SizedBox(height: 8),
-        GridView.count(
-          shrinkWrap: true,
-          crossAxisCount: 4,
-          childAspectRatio: 1.6,
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-          children: List.generate(12, (i) {
-            final m = i + 1;
-            final selected = m == _month;
-            return GestureDetector(
-              onTap: () {
-                setState(() => _month = m);
-                widget.onChanged(DateTime(_year, _month));
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.primary : const Color(0xFFF7FAFC),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: selected ? AppColors.primary : AppColors.border),
+                },
+                icon: const Icon(Icons.chevron_left)),
+            Text('$_year',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            IconButton(
+                onPressed: _year < now.year
+                    ? () {
+                        setState(() => _year++);
+                        widget.onChanged(DateTime(_year, _month));
+                      }
+                    : null,
+                icon: Icon(Icons.chevron_right,
+                    color: _year < now.year ? null : Colors.grey.shade300)),
+          ]),
+          const SizedBox(height: 8),
+          // Month grid
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 4,
+            childAspectRatio: 1.6,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            children: List.generate(12, (i) {
+              final m = i + 1;
+              final selected = m == _month;
+              // Block future months in the current year
+              final isFuture = _year == now.year && m > now.month;
+              return GestureDetector(
+                onTap: isFuture
+                    ? null
+                    : () {
+                        setState(() => _month = m);
+                        widget.onChanged(DateTime(_year, _month));
+                      },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isFuture
+                        ? const Color(0xFFF0F0F0)
+                        : selected
+                            ? AppColors.primary
+                            : const Color(0xFFF7FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: isFuture
+                            ? Colors.grey.shade300
+                            : selected
+                                ? AppColors.primary
+                                : AppColors.border),
+                  ),
+                  child: Center(
+                    child: Text('T${m.toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isFuture
+                                ? Colors.grey.shade400
+                                : selected
+                                    ? Colors.white
+                                    : AppColors.textPrimary)),
+                  ),
                 ),
-                child: Center(
-                  child: Text('T${m.toString().padLeft(2, '0')}',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: selected ? Colors.white : AppColors.textPrimary)),
-                ),
-              ),
-            );
-          }),
-        ),
-      ],
+              );
+            }),
+          ),
+        ],
+      ),
     );
   }
 }

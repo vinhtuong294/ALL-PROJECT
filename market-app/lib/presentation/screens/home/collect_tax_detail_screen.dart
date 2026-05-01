@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:market_app/core/constants/app_colors.dart';
 import 'package:market_app/data/models/stall_fee_model.dart';
 import 'package:market_app/injection_container.dart';
+import 'package:market_app/presentation/bloc/dashboard/dashboard_bloc.dart';
+import 'package:market_app/presentation/bloc/dashboard/dashboard_state.dart';
 import 'package:market_app/presentation/bloc/tax/tax_bloc.dart';
 import 'package:market_app/presentation/bloc/tax/tax_event.dart';
 import 'package:market_app/presentation/bloc/tax/tax_state.dart';
@@ -85,10 +87,15 @@ class _CollectTaxDetailScreenState extends State<CollectTaxDetailScreen> {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (_) => TaxReceiptScreen(
-                  detail: _detailData!.copyWith(fee: collectedAmount, feeStatus: 'da_nop'),
-                  paymentMethod: _paymentMethod,
-                ),
+                builder: (_) {
+                  final dashState = context.read<DashboardBloc>().state;
+                  final marketName = dashState is DashboardSuccess ? dashState.stats.marketName : null;
+                  return TaxReceiptScreen(
+                    detail: _detailData!.copyWith(fee: collectedAmount, feeStatus: 'da_nop'),
+                    paymentMethod: _paymentMethod,
+                    marketName: marketName,
+                  );
+                },
               ),
             ).then((_) {
                if (mounted) Navigator.pop(context, true);
@@ -110,7 +117,7 @@ class _CollectTaxDetailScreenState extends State<CollectTaxDetailScreen> {
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: const MarketAppBar(
-          title: 'Thu Thuế Gian Hàng',
+          title: 'Thu Tiền Gian Hàng',
           showBack: true,
         ),
         body: BlocBuilder<TaxBloc, TaxState>(
@@ -135,7 +142,7 @@ class _CollectTaxDetailScreenState extends State<CollectTaxDetailScreen> {
                         _buildInfoSection(data),
                         const SizedBox(height: 24),
                         const Text(
-                          'Thông tin thu thuế',
+                          'Thông tin thu tiền',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 12),
@@ -179,7 +186,7 @@ class _CollectTaxDetailScreenState extends State<CollectTaxDetailScreen> {
           const Divider(height: 32),
           _buildInfoRow('Địa chỉ', data?.address ?? 'Chợ Bắc Mỹ An, Đà Nẵng'),
           const Divider(height: 32),
-          _buildInfoRow('Thuế mặc định',
+          _buildInfoRow('Tiền mặc định',
               '${_fmt.format((data?.fee ?? (initial['amount'] as num).toDouble()).toInt())} VNĐ',
               isHighlight: true),
         ],
@@ -283,7 +290,7 @@ class _CollectTaxDetailScreenState extends State<CollectTaxDetailScreen> {
             onPressed: () {
               if (_detailData != null && _detailData!.feeStatus == 'da_nop') {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Gian hàng này đã nộp thuế')),
+                  const SnackBar(content: Text('Gian hàng này đã nộp tiền')),
                 );
                 return;
               }

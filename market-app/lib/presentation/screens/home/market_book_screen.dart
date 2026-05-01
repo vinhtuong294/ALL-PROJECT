@@ -287,7 +287,8 @@ class _MarketBookScreenState extends State<MarketBookScreen> {
     final filteredStalls = dash.stalls.where((s) {
       final matchCat = _selectedCategory == 'tat_ca' || s.categoryMa == _selectedCategory;
       final matchSearch = s.stallName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          s.stallId.toLowerCase().contains(_searchQuery.toLowerCase());
+          s.stallId.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          s.userName.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchCat && matchSearch;
     }).toList();
 
@@ -304,45 +305,152 @@ class _MarketBookScreenState extends State<MarketBookScreen> {
           crossAxisCount: 3,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 1.2,
+          childAspectRatio: 1.0,
         ),
         itemCount: filteredStalls.length,
         itemBuilder: (context, index) {
           final s = filteredStalls[index];
           final isOpen = s.status == 'mo_cua';
+          final bgColor = isOpen ? const Color(0xFFE8F5E9) : const Color(0xFFFEE2E2);
+          final textColor = isOpen ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+          final subColor = isOpen ? const Color(0xFF43A047) : const Color(0xFFE53935);
 
-          return Container(
-            decoration: BoxDecoration(
-              color: isOpen ? const Color(0xFFE8F5E9) : const Color(0xFFFEE2E2),
-              borderRadius: BorderRadius.circular(10),
+          return GestureDetector(
+            onTap: () => _showStallPopup(context, s),
+            child: Container(
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isOpen ? const Color(0xFFA5D6A7) : const Color(0xFFEF9A9A),
+                  width: 1,
+                ),
+              ),
+              padding: const EdgeInsets.all(6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    s.stallName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    s.userName,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: subColor,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isOpen ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      isOpen ? 'Mở' : 'Đóng',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+          );
+        },
+      ),
+    );
+  }
+
+  void _showStallPopup(BuildContext context, StallInfoModel s) {
+    final isOpen = s.status == 'mo_cua';
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              Icons.storefront,
+              color: isOpen ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                s.stallName,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _infoRow(Icons.badge_outlined, 'Mã gian hàng', s.stallId),
+            _infoRow(Icons.person_outline, 'Chủ sạp', s.userName),
+            _infoRow(Icons.category_outlined, 'Loại hàng', s.categoryMa),
+            const SizedBox(height: 8),
+            Row(
               children: [
-                Text(
-                  s.stallId,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: isOpen
-                        ? const Color(0xFF2E7D32)
-                        : const Color(0xFFC62828),
+                Container(
+                  width: 10, height: 10,
+                  decoration: BoxDecoration(
+                    color: isOpen ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
+                    shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(width: 8),
                 Text(
-                  isOpen ? 'Mở' : 'Đóng',
+                  isOpen ? 'Đang mở cửa' : 'Đang đóng cửa',
                   style: TextStyle(
-                    fontSize: 10,
-                    color: isOpen
-                        ? const Color(0xFF43A047)
-                        : const Color(0xFFE53935),
+                    fontWeight: FontWeight.bold,
+                    color: isOpen ? const Color(0xFF4CAF50) : const Color(0xFFF44336),
                   ),
                 ),
               ],
             ),
-          );
-        },
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Đóng', style: TextStyle(color: AppColors.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Text('$label: ', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }
@@ -445,7 +553,6 @@ class _MarketBookScreenState extends State<MarketBookScreen> {
       child: ElevatedButton(
         onPressed: () {
           if (_formSelectedStall == null) return;
-          print('DEBUG: Button clicked, dispatching UpdateStallStatusEvent for $_formSelectedStall');
           context.read<DashboardBloc>().add(UpdateStallStatusEvent(
             stallId: _formSelectedStall!,
             status: _formNewStatus,

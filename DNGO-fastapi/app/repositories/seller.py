@@ -275,20 +275,29 @@ def get_orders(db: Session, user_id: str, order_status: str = None, page: int = 
         .count()
     )
 
+    # Batch load buyers + users (tránh N+1)
+    order_ids = [o.order_id for o in orders]
+    buyer_ids = [o.buyer_id for o in orders if o.buyer_id]
+    buyer_map = {b.buyer_id: b for b in db.query(Buyer).filter(Buyer.buyer_id.in_(buyer_ids)).all()} if buyer_ids else {}
+    user_ids = [b.user_id for b in buyer_map.values() if b.user_id]
+    user_map = {u.user_id: u for u in db.query(UserModel).filter(UserModel.user_id.in_(user_ids)).all()} if user_ids else {}
+
+    # Batch load order items (tránh N+1)
+    all_items = (
+        db.query(OrderDetail, Ingredient)
+        .join(Ingredient, Ingredient.ingredient_id == OrderDetail.ingredient_id)
+        .filter(OrderDetail.order_id.in_(order_ids), OrderDetail.stall_id == stall_id)
+        .all()
+    )
+    items_map: dict = {}
+    for od, ing in all_items:
+        items_map.setdefault(od.order_id, []).append((od, ing))
+
     data = []
     for order in orders:
-        buyer = db.query(Buyer).filter(Buyer.buyer_id == order.buyer_id).first()
-        user = db.query(UserModel).filter(UserModel.user_id == buyer.user_id).first() if buyer else None
-
-        items = (
-            db.query(OrderDetail, Ingredient)
-            .join(Ingredient, Ingredient.ingredient_id == OrderDetail.ingredient_id)
-            .filter(
-                OrderDetail.order_id == order.order_id,
-                OrderDetail.stall_id == stall_id
-            )
-            .all()
-        )
+        buyer = buyer_map.get(order.buyer_id)
+        user = user_map.get(buyer.user_id) if buyer else None
+        items = items_map.get(order.order_id, [])
 
         data.append({
             "order_id": order.order_id,
