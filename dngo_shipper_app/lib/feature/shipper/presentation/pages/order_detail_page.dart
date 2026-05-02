@@ -11,7 +11,6 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/api_service.dart';
 import '../../../../core/services/location_tracking_service.dart';
 import '../../../../core/utils/helpers.dart';
-import 'chat_with_seller_page.dart';
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -107,9 +106,10 @@ class _OrderDetailPageState extends State<OrderDetailPage>
     if (deliveryAddress.isEmpty) return;
 
     // Dùng GPS thực từ API nếu có, không cần geocoding Nominatim
+    // Backend trả lat/lng đảo ngược: field 'lat'=longitude (~108), field 'lng'=latitude (~16)
     final choInfo = _order?['cho_info'] as Map<String, dynamic>?;
-    final marketLat = (choInfo?['lat'] as num?)?.toDouble();
-    final marketLng = (choInfo?['lng'] as num?)?.toDouble();
+    final marketLat = (choInfo?['lng'] as num?)?.toDouble();
+    final marketLng = (choInfo?['lat'] as num?)?.toDouble();
 
     setState(() => _geocodingMap = true);
 
@@ -1325,23 +1325,6 @@ class _OrderDetailPageState extends State<OrderDetailPage>
                   launchUrl(Uri(scheme: 'tel', path: phone));
                 }
               },
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _actionBtn(
-              icon: Icons.chat_rounded,
-              label: 'Chat',
-              color: _kGreen,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChatWithSellerPage(
-                    orderId: widget.orderId,
-                    sellerName: storeName,
-                  ),
-                ),
-              ),
             ),
           ),
           const SizedBox(width: 8),

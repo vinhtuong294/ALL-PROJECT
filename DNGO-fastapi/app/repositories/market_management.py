@@ -728,13 +728,14 @@ def list_pending_sellers(db: Session, page: int = 1, limit: int = 10, search: Op
     
     offset = (page - 1) * limit
 
-    # Tìm những user có role = "nguoi_ban" nhưng chưa có gian hàng (không quan tâm approval_status)
+    # Tìm người bán chưa được duyệt (approval_status=0) và chưa có gian hàng
     query = db.query(User).filter(
-        User.role == "nguoi_ban"
+        User.role == "nguoi_ban",
+        User.approval_status == 0,
     ).outerjoin(
         Stall, Stall.user_id == User.user_id
     ).filter(
-        Stall.user_id == None  # Không có gian hàng
+        Stall.user_id == None
     )
 
     if search:
@@ -752,7 +753,11 @@ def list_pending_sellers(db: Session, page: int = 1, limit: int = 10, search: Op
             "user_id": u.user_id,
             "user_name": u.user_name,
             "phone": u.phone,
-            "address": u.address
+            "address": u.address,
+            "ma_nguoi_dung": u.user_id,
+            "ten_nguoi_dung": u.user_name,
+            "sdt": u.phone,
+            "dia_chi": u.address
         }
         for u in rows
     ]

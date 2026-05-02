@@ -10,8 +10,8 @@ class UnauthorizedException implements Exception {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.1.155:8002';
-  static const String coreBaseUrl = 'http://192.168.1.155:8002';
+  static const String baseUrl = 'http://207.180.233.84:8000';
+  static const String coreBaseUrl = 'http://207.180.233.84:8000';
   static const Duration _timeout = Duration(seconds: 60);
 
   // ── helpers ──

@@ -355,6 +355,26 @@ class _VendorListScreenState extends State<VendorListScreen>
             ),
           );
         }
+        if (state is MerchantError) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 40, color: Colors.red),
+                const SizedBox(height: 8),
+                Text(state.message,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () => _merchantBloc.add(const GetPendingMerchantsEvent()),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Thử lại'),
+                ),
+              ],
+            ),
+          );
+        }
         return const SizedBox.shrink();
       },
     );
