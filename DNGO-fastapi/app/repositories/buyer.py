@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
+from fastapi import HTTPException
 from typing import Optional, Dict, Any, List
 from app.models.models import (
     District, Market, Stall, Category, Ingredient, Goods,
@@ -906,7 +907,7 @@ def refund_order_details(db: Session, buyer_id: str, order_id: str, items: list)
     ).first()
 
     if not order:
-        raise Exception("Không tìm thấy đơn hàng")
+        raise HTTPException(status_code=400, detail="Không tìm thấy đơn hàng")
 
     updated_items = []
 
@@ -919,11 +920,11 @@ def refund_order_details(db: Session, buyer_id: str, order_id: str, items: list)
         reason = item.get("reason")
 
         if not ingredient_id or not stall_id or not reason:
-            raise Exception("Thiếu ingredient_id, stall_id hoặc reason")
+            raise HTTPException(status_code=400, detail="Thiếu ingredient_id, stall_id hoặc reason")
 
         # ❗ validate reason
         if reason not in VALID_CANCEL_REASONS:
-            raise Exception(f"Lý do không hợp lệ: {reason}")
+            raise HTTPException(status_code=400, detail=f"Lý do không hợp lệ: {reason}")
 
         # 🔍 tìm order_detail
         detail = db.query(OrderDetail).filter(
@@ -933,15 +934,15 @@ def refund_order_details(db: Session, buyer_id: str, order_id: str, items: list)
         ).first()
 
         if not detail:
-            raise Exception(f"Không tìm thấy sản phẩm {ingredient_id} ở stall {stall_id}")
+            raise HTTPException(status_code=400, detail=f"Không tìm thấy sản phẩm {ingredient_id} ở stall {stall_id}")
 
         # ❗ không cho hoàn lại lần 2
         if detail.detail_status == "hoan_hang":
-            raise Exception(f"Sản phẩm {ingredient_id} đã hoàn trước đó")
+            raise HTTPException(400, detail=f"Sản phẩm {ingredient_id} đã hoàn trước đó")
 
         # ❗ rule cho hoàn
-        if detail.detail_status not in ["da_duyet", "tu_choi"]:
-            raise Exception(f"Sản phẩm {ingredient_id} chưa đủ điều kiện hoàn")
+        if detail.detail_status not in ["da_duyet", "tu_choi", "da_lay_hang", "da_giao", "hoan_thanh"]:
+            raise HTTPException(400, detail=f"Sản phẩm {ingredient_id} chưa đủ điều kiện hoàn (hiện tại: {detail.detail_status})")
 
         # =========================
         # 3. UPDATE DETAIL

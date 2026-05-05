@@ -292,6 +292,7 @@ class _OrderDetailPageState extends State<OrderDetailPage>
       debugPrint('❌ [_updateStatus] Error: $e');
       if (mounted) {
         _showSnack(e.toString().replaceFirst('Exception: ', ''), isError: true);
+        await _loadDetail();
       }
     } finally {
       if (mounted) setState(() => _updating = false);
@@ -335,6 +336,8 @@ class _OrderDetailPageState extends State<OrderDetailPage>
               : e.toString().replaceFirst('Exception: ', ''),
           isError: true,
         );
+        // Reload so shipper sees the actual current status (e.g., order was cancelled)
+        await _loadDetail();
       }
     } finally {
       if (mounted) setState(() => _updating = false);

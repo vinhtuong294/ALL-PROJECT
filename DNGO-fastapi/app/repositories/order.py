@@ -113,6 +113,8 @@ def get_order_detail(db: Session, order_id: str, user_id: str) -> Optional[Dict[
                 "hinh_anh": stall.stall_image,
             } if stall else None,
             "don_vi_ban": goods.unit if goods else None,
+            "detail_status": item.detail_status,
+            "cancel_reason": item.cancel_reason,
         })
 
     return {

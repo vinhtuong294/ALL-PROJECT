@@ -423,9 +423,14 @@ class CartRepository:
         # TÍNH DISTANCE + SHIP
         # =========================
         try:
-            distance = calculate_distance(market_address, body.delivery_address)
-        except Exception:
-            distance = 5.0  # fallback khi geocoding API không khả dụng
+            if body.delivery_lat is not None and body.delivery_lng is not None:
+                from app.utils.distance import geocode, get_distance_km
+                lat1, lng1 = geocode(market_address)
+                distance = get_distance_km(lat1, lng1, body.delivery_lat, body.delivery_lng)
+            else:
+                distance = calculate_distance(market_address, body.delivery_address)
+        except Exception as e:
+            raise HTTPException(400, f"Không thể tính phí ship. Vui lòng kiểm tra lại địa chỉ giao hàng (Lỗi: {e})")
         shipping_fee = calculate_shipping_fee(distance or 0)
 
         # =========================

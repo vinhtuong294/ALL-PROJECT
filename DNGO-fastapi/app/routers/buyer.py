@@ -297,6 +297,43 @@ def get_time_slots(db: Session = Depends(get_db)):
     ]
     
 
+@router.get("/shipping-fee")
+def get_shipping_fee(
+    stall_id: str = Query(...),
+    delivery_lat: Optional[float] = Query(None),
+    delivery_lng: Optional[float] = Query(None),
+    delivery_address: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import Stall, Market
+    from app.utils.distance import geocode, get_distance_km, calculate_distance
+    from app.utils.shipping_fee import calculate_shipping_fee
+
+    stall = db.query(Stall).filter(Stall.stall_id == stall_id).first()
+    if not stall:
+        raise HTTPException(404, "Không tìm thấy gian hàng")
+    market = db.query(Market).filter(Market.market_id == stall.market_id).first()
+    if not market:
+        raise HTTPException(404, "Không tìm thấy chợ")
+    market_address = market.market_address
+
+    try:
+        if delivery_lat is not None and delivery_lng is not None:
+            lat1, lng1 = geocode(market_address)
+            distance = get_distance_km(lat1, lng1, delivery_lat, delivery_lng)
+        elif delivery_address:
+            distance = calculate_distance(market_address, delivery_address)
+        else:
+            raise HTTPException(400, "Cần cung cấp delivery_lat/delivery_lng hoặc delivery_address")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Không thể tính phí ship: {e}")
+
+    fee = calculate_shipping_fee(distance)
+    return {"shipping_fee": fee, "distance_km": round(distance, 2)}
+
+
 @router.post("/refund")
 def refund_order(
     body: RefundRequest,

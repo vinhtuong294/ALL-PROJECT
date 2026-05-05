@@ -55,8 +55,10 @@ class PaymentMethod(str, Enum):
 class CheckoutBody(BaseModel):
     selected_items: list[SelectedItem]
     payment_method: PaymentMethod = PaymentMethod.chuyen_khoan
-    delivery_address: str 
-    time_slot_id: str 
+    delivery_address: str
+    time_slot_id: str
+    delivery_lat: float | None = None
+    delivery_lng: float | None = None
     
     
     

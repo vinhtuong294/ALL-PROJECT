@@ -23,21 +23,90 @@ def _extract_address(raw: str) -> str:
     raw = re.sub(r'[,\s]+(vi[eê]t\s*nam|viet\s*nam|vietnam)\s*$', '', raw.strip(), flags=re.IGNORECASE).strip()
     # Strip trailing 5-6 digit postal code (e.g. ", 02363")
     raw = re.sub(r',\s*\d{5,6}\s*$', '', raw).strip()
+    # Nominatim returns house numbers as separate comma-separated components:
+    # "50, Đường X, ..." → normalize to "50 Đường X, ..." so GraphHopper understands
+    raw = re.sub(r'^(\d+[a-zA-Z]?),\s*', r'\1 ', raw)
     return raw
 
 
 import logging as _logging
 _log = _logging.getLogger(__name__)
 
+
+def _simplify_for_graphhopper(address: str) -> str:
+    """Remove ward/district admin-level components that confuse GraphHopper.
+    Keeps house number, street name, and city. Replaces verbose city forms
+    like 'Thành phố Đà Nẵng' with just 'Đà Nẵng'."""
+    parts = [p.strip() for p in address.split(',')]
+    skip_prefixes = ('phường', 'quận', 'huyện', 'thị xã', 'thị trấn', 'xã ')
+    kept = []
+    for part in parts:
+        lower = part.lower()
+        if any(lower.startswith(p) for p in skip_prefixes):
+            continue
+        # Shorten "Thành phố X" → "X"
+        part = re.sub(r'^[Tt]h[àa]nh\s+ph[ốo]\s+', '', part).strip()
+        # Shorten "Tỉnh X" → "X"
+        part = re.sub(r'^[Tt][ỉi]nh\s+', '', part).strip()
+        if part:
+            kept.append(part)
+    return ', '.join(kept)
+
+
 def geocode(address: str):
     clean = _extract_address(address)
     if not clean or clean.lower() in ('n/a', 'na', ''):
         raise ValueError(f"Địa chỉ không hợp lệ: {address}")
+    
+    # Smart append location context to avoid wrong provinces
+    lower_clean = clean.lower()
+    search_query = clean
+    if "đà nẵng" not in lower_clean and "da nang" not in lower_clean:
+        if "hội an" not in lower_clean and "hoi an" not in lower_clean:
+            # Default priority to Da Nang if no other city is specified
+            search_query = f"{clean}, Đà Nẵng"
+    
     gh_key = os.getenv("GRAPH_HOPPER_API_KEY", "")
     _log.info(f"[geocode] key={'SET' if gh_key else 'EMPTY'} clean={repr(clean[:50])}")
-    if gh_key:
-        return _geocode_graphhopper(clean, gh_key)
-    return _geocode_nominatim(clean)
+
+    try:
+        if gh_key:
+            gh_query = _simplify_for_graphhopper(search_query)
+            _log.info(f"[geocode] GH query: {repr(gh_query[:80])}")
+            return _geocode_graphhopper(gh_query, gh_key)
+        return _geocode_nominatim(search_query)
+    except ValueError as e:
+        # Fallback: remove complex house numbers (e.g. "586/12", "K586", "Lô 12", "Số 15") and try again
+        import re
+        # Regex explanation:
+        # (Số|Lô|Kiệt|K)?\s* : Optional prefixes
+        # \d+               : The main number
+        # ([a-zA-Z])?       : Optional letter like A, B
+        # (/\d+[a-zA-Z]?)*  : Optional slash combinations like /12/3B
+        # \s*,?\s*          : Trailing spaces and comma
+        regex = r'^(Số|Lô|Kiệt|K|Ngõ|Hẻm)?\s*\d+[a-zA-Z]?((/|-)\d+[a-zA-Z]?)*\s*,?\s*'
+        no_house = re.sub(regex, '', clean, flags=re.IGNORECASE).strip()
+        
+        # Sometimes people write "Đường Lê Duẩn", but Nominatim prefers "Lê Duẩn" or handles it fine.
+        if no_house and no_house != clean:
+            _log.info(f"[geocode] Fallback to no-house number: {no_house}")
+            fallback_query = no_house
+            if "đà nẵng" not in no_house.lower() and "da nang" not in no_house.lower() and "hội an" not in no_house.lower() and "hoi an" not in no_house.lower():
+                fallback_query = f"{no_house}, Đà Nẵng"
+            if gh_key:
+                try:
+                    return _geocode_graphhopper(_simplify_for_graphhopper(fallback_query), gh_key)
+                except ValueError:
+                    # GraphHopper also fails without house number → try Nominatim
+                    return _geocode_nominatim(fallback_query)
+            return _geocode_nominatim(fallback_query)
+        # No house number to strip → try Nominatim directly as last resort
+        if gh_key:
+            try:
+                return _geocode_nominatim(search_query)
+            except ValueError:
+                pass
+        raise e
 
 
 @lru_cache(maxsize=512)

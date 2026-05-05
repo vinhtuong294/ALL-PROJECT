@@ -108,7 +108,8 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
     try {
       final data = await ApiService.getAvailableOrders(page: 1, limit: 50);
       if (!mounted) return;
-      final items = (data['items'] as List<dynamic>?) ?? [];
+      final rawItems = (data['items'] as List<dynamic>?) ?? [];
+      final items = rawItems.where((o) => o['hinh_thuc_thanh_toan'] != 'tien_mat').toList();
       final newIds = items
           .map((o) => (o['ma_don_hang'] ?? '').toString())
           .where((id) => id.isNotEmpty)
@@ -126,7 +127,7 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
         _knownOrderIds = newIds;
         setState(() {
           _available = items;
-          _totalAvail = data['total'] ?? items.length;
+          _totalAvail = items.length;
           _newOrderCount = brandNewIds.length;
         });
         _showNewOrderBanner(brandNewIds.length);
@@ -217,9 +218,12 @@ class _OrdersTabState extends State<OrdersTab> with TickerProviderStateMixin {
     try {
       final data = await ApiService.getAvailableOrders(page: 1, limit: 50);
       if (mounted) {
+        final rawItems = (data['items'] as List<dynamic>?) ?? [];
+        final items = rawItems.where((o) => o['hinh_thuc_thanh_toan'] != 'tien_mat').toList();
+        
         setState(() {
-          _available = data['items'] ?? [];
-          _totalAvail = data['total'] ?? 0;
+          _available = items;
+          _totalAvail = items.length;
           _loadingAvail = false;
           _knownOrderIds = (_available)
               .map((o) => (o['ma_don_hang'] ?? '').toString())

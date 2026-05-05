@@ -1,6 +1,6 @@
 import time
 from app.database import SessionLocal
-from app.models.models import OrderDetail, Order
+from app.models.models import OrderDetail, Order, Payment
 
 
 def auto_confirm_order(order_id: str):
@@ -16,6 +16,14 @@ def auto_confirm_order(order_id: str):
         if not order or order.order_status != "chua_xac_nhan":
             return
 
+        # Kiểm tra thanh toán — chỉ xác nhận nếu đã thanh toán xong
+        # (COD đã bỏ, chỉ còn VNPay nên bắt buộc phải da_thanh_toan)
+        payment = db.query(Payment).filter(Payment.payment_id == order.payment_id).first()
+        if not payment or payment.payment_status != "da_thanh_toan":
+            order.order_status = "da_huy"
+            db.commit()
+            return
+
         details = db.query(OrderDetail).filter(
             OrderDetail.order_id == order_id
         ).all()
@@ -25,7 +33,6 @@ def auto_confirm_order(order_id: str):
             if d.detail_status == "cho_duyet":
                 d.detail_status = "da_duyet"
 
-        # Luôn chuyển sang da_xac_nhan sau 2 phút (kể cả khi không có gì thay đổi)
         order.order_status = "da_xac_nhan"
         db.commit()
 
