@@ -388,7 +388,7 @@ class _TaxCard extends StatelessWidget {
           return;
         }
 
-        final result = await Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => CollectTaxDetailScreen(
@@ -401,9 +401,7 @@ class _TaxCard extends StatelessWidget {
             ),
           ),
         );
-        if (result == true) {
-          onRefresh();
-        }
+        onRefresh();
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),

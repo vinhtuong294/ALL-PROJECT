@@ -82,27 +82,21 @@ class _CollectTaxDetailScreenState extends State<CollectTaxDetailScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(state.message), backgroundColor: Colors.green),
           );
-          if (_detailData != null) {
-            final collectedAmount = double.tryParse(_amountController.text.replaceAll('.', '')) ?? _detailData!.fee;
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) {
-                  final dashState = context.read<DashboardBloc>().state;
-                  final marketName = dashState is DashboardSuccess ? dashState.stats.marketName : null;
-                  return TaxReceiptScreen(
-                    detail: _detailData!.copyWith(fee: collectedAmount, feeStatus: 'da_nop'),
-                    paymentMethod: _paymentMethod,
-                    marketName: marketName,
-                  );
-                },
+          final collectedAmount = double.tryParse(_amountController.text.replaceAll('.', ''))
+              ?? (_detailData?.fee ?? (widget.initialData['amount'] as num).toDouble());
+          final dashState = context.read<DashboardBloc>().state;
+          final marketName = dashState is DashboardSuccess ? dashState.stats.marketName : null;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TaxReceiptScreen(
+                detail: _detailData?.copyWith(fee: collectedAmount, feeStatus: 'da_nop'),
+                feeId: _detailData == null ? widget.feeId : null,
+                paymentMethod: _paymentMethod,
+                marketName: marketName,
               ),
-            ).then((_) {
-               if (mounted) Navigator.pop(context, true);
-            });
-          } else {
-            Navigator.pop(context, true);
-          }
+            ),
+          );
         } else if (state is TaxError) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(state.message), backgroundColor: Colors.red),

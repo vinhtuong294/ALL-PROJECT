@@ -1005,10 +1005,17 @@ def send_fee_notifications(db: Session, manage_id: str, title: str, body: str):
 
     count = 0
     for stall, user, fee in rows:
-        if fee is None or fee.fee_status == "da_nop":
+        if fee is not None and fee.fee_status == "da_nop":
             continue
 
-        fee_amount = int(fee.fee)
+        if fee is not None:
+            fee_amount = int(fee.fee)
+            fee_id_payload = fee.fee_id
+        else:
+            # Fallback nếu seller mới được duyệt/cấp sạp chưa có bản ghi StallFee
+            fee_amount = int(stall.stall_fee) if hasattr(stall, 'stall_fee') and stall.stall_fee else 500000
+            fee_id_payload = stall.stall_id
+
         transfer_content = f"PHI GH {stall.stall_id} {current_month.strftime('%m%Y')}"
 
         qr_url = None
@@ -1022,7 +1029,7 @@ def send_fee_notifications(db: Session, manage_id: str, title: str, body: str):
 
         data_payload = json.dumps({
             "type": "fee_payment",
-            "fee_id": fee.fee_id,
+            "fee_id": fee_id_payload,
             "stall_id": stall.stall_id,
             "amount": fee_amount,
             "qr_url": qr_url,

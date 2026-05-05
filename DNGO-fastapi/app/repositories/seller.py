@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from typing import Optional, Dict, Any
 from datetime import datetime
-from app.models.models import Stall, Goods, Ingredient, Order, OrderDetail, Ingredient, Buyer, User as UserModel
+from app.models.models import Stall, Goods, Ingredient, Order, OrderDetail, Ingredient, Buyer, User as UserModel, TimeSlot
 from app.utils.paginate import paginate, create_meta
 from app.utils.vietnamese import remove_accents
 from sqlalchemy import and_, desc
@@ -293,11 +293,16 @@ def get_orders(db: Session, user_id: str, order_status: str = None, page: int = 
     for od, ing in all_items:
         items_map.setdefault(od.order_id, []).append((od, ing))
 
+    # Batch load time slots
+    time_slot_ids = [o.time_slot_id for o in orders if o.time_slot_id]
+    time_slot_map = {ts.time_slot_id: ts for ts in db.query(TimeSlot).filter(TimeSlot.time_slot_id.in_(time_slot_ids)).all()} if time_slot_ids else {}
+
     data = []
     for order in orders:
         buyer = buyer_map.get(order.buyer_id)
         user = user_map.get(buyer.user_id) if buyer else None
         items = items_map.get(order.order_id, [])
+        ts = time_slot_map.get(order.time_slot_id)
 
         data.append({
             "order_id": order.order_id,
@@ -305,6 +310,7 @@ def get_orders(db: Session, user_id: str, order_status: str = None, page: int = 
             "delivery_time": str(order.delivery_time),
             "delivery_address": order.delivery_address,
             "nguoi_mua": user.user_name if user else "Không rõ",
+            "time_slot": f"{ts.start_time.strftime('%H:%M')} - {ts.end_time.strftime('%H:%M')}" if ts else None,
             "nguyen_lieu": [
                 {
                     "ingredient_id": od.ingredient_id,
